@@ -6,6 +6,7 @@ import morgan from "morgan"
 import { addIdeasRoutes } from "./routes/ideas.js"
 import { addGoalsRoutes } from "./routes/goals.js"
 import { connectToDatabase } from "./database/database.js"
+import { auth } from "express-openid-connect"
 
 
 // config
@@ -29,6 +30,8 @@ app.use(bodyParser.json())
 app.use(cors())
 // cool logs
 app.use(morgan("combined"))
+// auth0
+app.use(auth())
 
 
 // routes
