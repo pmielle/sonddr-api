@@ -4,7 +4,7 @@ import { MongoClient } from "mongodb"
 // properties
 // ----------------------------------------------
 let database = null
-const databaseHost = "mongo"
+const databaseHost = "database"
 const databasePort = 27017
 const mongoUrl = `mongodb://${databaseHost}:${databasePort}`
 
