@@ -1,0 +1,19 @@
+services:
+  
+  # database container
+  # ---------------------------------------------
+  database:
+    build: ./database
+    ports:
+      - "27017:27017"
+    env_file:
+      - .env/database
+
+  # api container
+  # ---------------------------------------------
+  api:
+    build: ./api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - "database"

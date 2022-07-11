@@ -1,0 +1,28 @@
+{
+  "name": "sonddr-api",
+  "version": "0.1.0",
+  "description": "",
+  "scripts": {
+    "start": "node ./src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/pmielle/sonddr-api.git"
+  },
+  "author": "Paul MIELLE",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/pmielle/sonddr-api/issues"
+  },
+  "homepage": "https://github.com/pmielle/sonddr-api#readme",
+  "type": "module",
+  "dependencies": {
+    "body-parser": "^1.20.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.1",
+    "helmet": "^5.1.0",
+    "mongodb": "^4.7.0",
+    "morgan": "^1.10.0"
+  }
+}
