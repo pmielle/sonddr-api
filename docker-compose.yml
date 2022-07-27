@@ -6,6 +6,8 @@ services:
     build: ./database
     env_file:
       - .env/database
+    volumes:
+      - ./database/data:/data/db
 
   # api container
   # ---------------------------------------------
