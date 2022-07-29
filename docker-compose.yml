@@ -5,9 +5,8 @@ services:
   database:
     build: ./database
     env_file:
+      - .env/shared
       - .env/database
-    volumes:
-      - ./database/data:/data/db
 
   # api container
   # ---------------------------------------------
@@ -17,3 +16,5 @@ services:
       - "3000:3000"
     depends_on:
       - "database"
+    env_file:
+      - .env/shared

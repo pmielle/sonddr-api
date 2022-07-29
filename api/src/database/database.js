@@ -6,7 +6,10 @@ import { MongoClient } from "mongodb"
 let database = null
 const databaseHost = "database"
 const databasePort = 27017
-const mongoUrl = `mongodb://${databaseHost}:${databasePort}`
+const webUser=process.env.MONGO_WEB_USER
+const webPassword=process.env.MONGO_WEB_PASSWORD
+const databaseName=process.env.MONGO_DATABASE
+const mongoUrl = `mongodb://${webUser}:${webPassword}@${databaseHost}:${databasePort}/${databaseName}`
 
 
 // methods
