@@ -17,7 +17,7 @@ export const checkJwt = expressjwt({
         cache: true,
         rateLimit: true,
         jwksRequestsPerMinute: 5,
-        jwksUri: `${jwksUri}/.well-know/jwks.json`,
+        jwksUri: $jwksUri,
     }),
     audience: auth0Audience,
     issuer: auth0Issuer,
