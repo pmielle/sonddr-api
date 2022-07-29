@@ -4,10 +4,10 @@ import jwksRsa from "jwks-rsa"
 
 // config
 // ----------------------------------------------
-const auth0Issuer= "https://dev-p15u97v3.us.auth0.com"
+const auth0Issuer= "https://dev-p15u97v3.us.auth0.com/"  // trailing slash is required
 const auth0Audience = "https://sonddr-api"
 const auth0Algorithms = ['RS256']
-const jwksUri=`${auth0Issuer}/.well-known/jwks.json`
+const jwksUri=`${auth0Issuer}.well-known/jwks.json`
 
 
 // middleware
