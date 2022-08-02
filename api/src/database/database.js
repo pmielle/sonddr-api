@@ -42,7 +42,8 @@ export async function getCollection(collectionId) {
 // ----
 export async function addToCollection(collectionId, document) {
     let database = await getDatabase()
-    return await database.collection(collectionId).insertOne(document)
+    let response = await database.collection(collectionId).insertOne(document)
+    return {id: response.insertedId}
 }
 
 // update
