@@ -1,0 +1,21 @@
+{
+    "name": "sonddr-backend",
+    "version": "0.1.0",
+    "description": "",
+    "main": "server.js",
+    "scripts": {
+      "start": "tsc && node --es-module-specifier-resolution=node --no-warnings=ExperimentalWarning dist/server.js"
+    },
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/pmielle/sonddr-api.git"
+    },
+    "author": "Paul Mielle",
+    "license": "ISC",
+    "bugs": {
+      "url": "https://github.com/pmielle/sonddr-api/issues"
+    },
+    "homepage": "https://github.com/pmielle/sonddr-api#readme",
+    "type": "module",
+    "dependencies": { }
+  }
