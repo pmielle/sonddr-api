@@ -4,18 +4,23 @@
     "description": "",
     "main": "server.js",
     "scripts": {
-      "start": "tsc && node --es-module-specifier-resolution=node --no-warnings=ExperimentalWarning dist/server.js"
+        "start": "tsc && node --es-module-specifier-resolution=node --no-warnings=ExperimentalWarning dist/server.js"
     },
     "repository": {
-      "type": "git",
-      "url": "git+https://github.com/pmielle/sonddr-api.git"
+        "type": "git",
+        "url": "git+https://github.com/pmielle/sonddr-api.git"
     },
     "author": "Paul Mielle",
     "license": "ISC",
     "bugs": {
-      "url": "https://github.com/pmielle/sonddr-api/issues"
+        "url": "https://github.com/pmielle/sonddr-api/issues"
     },
     "homepage": "https://github.com/pmielle/sonddr-api#readme",
     "type": "module",
-    "dependencies": { }
-  }
+    "dependencies": {
+        "@types/cors": "^2.8.13",
+        "@types/express": "^4.17.17",
+        "cors": "^2.8.5",
+        "express": "^4.18.2"
+    }
+}
