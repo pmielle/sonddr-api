@@ -7,7 +7,7 @@ const port = 3000;
 const app = express();
 app.use(cors({origin: "http://localhost:4200"}));
 
-app.get('/toto/:id', async (req, res, next) => {
+app.get('/goals/:id', async (req, res, next) => {
     try {
         const doc = await getDocument(req.path);
         res.json(doc);
