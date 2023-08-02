@@ -10,7 +10,6 @@ export async function getDocument(path: string): Promise<Doc> {
     const [collId, docId] = _parseDocumentPath(path);
     const coll = db.collection(collId);
     const query = { _id: _makeMongoId(docId) };
-    console.log(query);
     let dbDoc = await coll.findOne(query);
     if (!dbDoc) {
         throw new NotFoundError();
