@@ -4,16 +4,24 @@ import { NotFoundError } from "./types";
 import { deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
 import { Goal } from "sonddr-shared";
+import session from "express-session";
+import KeycloakConnect from "keycloak-connect";
 
 const port = 3000;
 const app = express();
 app.use(express.json());  // otherwise req.body is undefined
 app.use(cors({origin: "http://localhost:4200"}));  // otherwise can't be reached by front
 
+// authentication
+// ----------------------------------------------
+const memoryStore = new session.MemoryStore();
+app.use(session({secret: 'some secret', saveUninitialized: true, resave: false, store: memoryStore}));
+const keycloak = new KeycloakConnect({store: memoryStore});  // reads keycloak.json
+app.use(keycloak.middleware());
 
 // routes
 // ----------------------------------------------
-app.get('/goals', async (req, res, next) => {
+app.get('/goals', keycloak.protect(), async (req, res, next) => {
     try {
         const docs = await getDocuments<Goal>(_getReqPath(req));
         res.json(docs);
@@ -29,7 +37,7 @@ app.use(_errorHandler);
 
 app.listen(port, () => {
     console.log(`Listening on port ${port}`);
-    console.log(`\n\n`);
+    console.log(`\n`);
 });
 
 

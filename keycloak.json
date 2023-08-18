@@ -1,0 +1,6 @@
+{
+  "realm": "sonddr",
+  "auth-server-url": "http://localhost:8080/",
+  "resource": "sonddr-backend",
+  "bearer-only": true
+}
