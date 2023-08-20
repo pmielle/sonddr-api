@@ -15,14 +15,14 @@ export async function getDocument<T extends Doc>(path: string): Promise<T> {
         throw new NotFoundError();
     }
     const doc = _replaceObjectIdWithId(dbDoc);
-    return doc as any;  // wtf typescript?
+    return doc as any;  // typescript??
 }
 
 export async function getDocuments<T extends Doc>(path: string): Promise<T[]> {
     const coll = db.collection(path);
     const dbDocs = await coll.find().toArray();
     const docs = dbDocs.map(_replaceObjectIdWithId);
-    return docs as any;  // wtf typescript?
+    return docs as any;  // typescript??
 }
 
 export async function postDocument(path: string, payload: object): Promise<string> {
@@ -85,13 +85,13 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
 function _replaceObjectIdWithId(dbDoc: WithId<BSON.Document>): Doc {
     const {_id, ...obj} = dbDoc;
     obj.id = dbDoc._id.toString();
-    return obj as any;  // wtf typescript?
+    return obj as any;  // typescript??
 }
 
 function _replaceIdWithObjectId(doc: Doc): WithId<BSON.Document> {
     const {id, ...dbDoc} = doc;
     dbDoc._id = _makeMongoId(id);
-    return dbDoc as any;  // wtf typescript?
+    return dbDoc as any;  // typescript??
 }
 
 // this cannot be changed recklessly because already inserted documents won't be able to be fetched anymore without a patch
@@ -120,5 +120,5 @@ function _parseDocumentPath(path: string): [string, string] {  // returns collec
     if (splitResult.length != 2) {
         throw new Error(`path '${path}' should yield 2 non-empty elements when split to '/'`);
     }
-    return splitResult as any;  // wtf typescript?
+    return splitResult as any;  // typescript??
 }
