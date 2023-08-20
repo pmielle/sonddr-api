@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
 import { deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { Goal } from "sonddr-shared";
+import { Discussion, Goal } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -24,6 +24,15 @@ app.use(keycloak.middleware());
 app.get('/goals', keycloak.protect(), async (req, res, next) => {
     try {
         const docs = await getDocuments<Goal>(_getReqPath(req));
+        res.json(docs);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+app.get('/discussions', keycloak.protect(), async (req, res, next) => {
+    try {
+        const docs = await getDocuments<Discussion>(_getReqPath(req));
         res.json(docs);
     } catch(err) { 
         next(err); 
