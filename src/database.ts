@@ -18,9 +18,15 @@ export async function getDocument<T extends Doc>(path: string): Promise<T> {
     return doc as any;  // typescript??
 }
 
-export async function getDocuments<T extends Doc>(path: string): Promise<T[]> {
+export async function getDocuments<T extends Doc>(path: string, orderBy?: keyof T, desc: boolean = false): Promise<T[]> {
     const coll = db.collection(path);
-    const dbDocs = await coll.find().toArray();
+    let cursor = coll.find();
+    if (orderBy) {
+        let sortObj: any = {};
+        sortObj[orderBy] = desc ? -1 : 1;
+        cursor = cursor.sort(sortObj);
+    }
+    const dbDocs = await cursor.toArray();
     const docs = dbDocs.map(_replaceObjectIdWithId);
     return docs as any;  // typescript??
 }

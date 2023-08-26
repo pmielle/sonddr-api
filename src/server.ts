@@ -23,7 +23,7 @@ app.use(keycloak.middleware());
 // ----------------------------------------------
 app.get('/goals', keycloak.protect(), async (req, res, next) => {
     try {
-        const docs = await getDocuments<Goal>(_getReqPath(req));
+        const docs = await getDocuments<Goal>(_getReqPath(req), "order");
         res.json(docs);
     } catch(err) { 
         next(err); 
