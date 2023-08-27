@@ -1,10 +1,58 @@
 [
-    {"name": "No poverty", "icon": "home", "color": "#89465E", "order": 1},
-    {"name": "Quality education", "icon": "school", "color": "#684689", "order": 8},
-    {"name": "Decent work", "icon": "work", "color": "#464D89", "order": 7},
-    {"name": "Health and well-being", "icon": "health_and_safety", "color": "#894646", "order": 2},
-    {"name": "Peace and justice", "icon": "balance", "color": "#468981", "order": 6},
-    {"name": "Preserved ecosystems", "icon": "eco", "color": "#4B8946", "order": 5},
-    {"name": "Reduced inequalities", "icon": "handshake", "color": "#896246", "order": 3},
-    {"name": "Sustainability", "icon": "recycling", "color": "#898246", "order": 4}
+    {
+        "_id": {"$oid": "13d8e2afa1e8cb1f48da6060"},
+        "name": "No poverty",
+        "icon": "home",
+        "color": "#89465E",
+        "order": 1
+    },
+    {
+        "_id": {"$oid": "fcb9e10abd6ea7a9afa8394f"},
+        "name": "Quality education",
+        "icon": "school",
+        "color": "#684689",
+        "order": 8
+    },
+    {
+        "_id": {"$oid": "018423897098b58ab8c6feec"},
+        "name": "Decent work",
+        "icon": "work",
+        "color": "#464D89",
+        "order": 7
+    },
+    {
+        "_id": {"$oid": "f4259282b8b1420f85cdab33"},
+        "name": "Health and well-being",
+        "icon": "health_and_safety",
+        "color": "#894646",
+        "order": 2
+    },
+    {
+        "_id": {"$oid": "7450434b25262f93951bc5ae"},
+        "name": "Peace and justice",
+        "icon": "balance",
+        "color": "#468981",
+        "order": 6
+    },
+    {
+        "_id": {"$oid": "b6a94cbafd39c0f273ea5664"},
+        "name": "Preserved ecosystems",
+        "icon": "eco",
+        "color": "#4B8946",
+        "order": 5
+    },
+    {
+        "_id": {"$oid": "cecab04c56555e42cc9b973c"},
+        "name": "Reduced inequalities",
+        "icon": "handshake",
+        "color": "#896246",
+        "order": 3
+    },
+    {
+        "_id": {"$oid": "cce2ce0ce57c2d9211e9e9c7"},
+        "name": "Sustainability",
+        "icon": "recycling",
+        "color": "#898246",
+        "order": 4
+    }
 ]

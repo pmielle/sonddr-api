@@ -1,0 +1,12 @@
+[
+    {
+        "_id": {"$oid": "98558edcdf614eff7de7a349"},
+        "title": "Colorful classrooms",
+        "authorId": {"$oid": "5df137bdcd6e1620f9fe27ac"},
+        "goalIds": [{"$oid": "13d8e2afa1e8cb1f48da6060"}],
+        "externalLinks": [],
+        "date": {"$date": "2023-08-27T08:36:59"},
+        "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque a lectus nec neque egestas feugiat. Mauris faucibus neque ac suscipit feugiat. Nunc dignissim ex non gravida aliquam. Suspendisse id vestibulum risus. Donec gravida euismod vestibulum. In a egestas elit. Proin elementum felis urna, id tincidunt odio tempor ac.",
+        "supports": 77
+    }
+]

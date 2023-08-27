@@ -1,0 +1,9 @@
+[
+    {
+        "_id": {"$oid": "5df137bdcd6e1620f9fe27ac"},
+        "name": "Rita2",
+        "date": {"$date": "2014-01-01T00:00:00"},
+        "externalLinks": [],
+        "bio": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque a lectus nec neque egestas feugiat. Mauris faucibus neque ac suscipit feugiat. Nunc dignissim ex non gravida aliquam."
+    }
+]
