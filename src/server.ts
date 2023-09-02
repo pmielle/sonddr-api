@@ -1,9 +1,9 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
-import { NotFoundError } from "./types";
-import { deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
+import { Doc, NotFoundError } from "./types";
+import { Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { Discussion, Goal } from "sonddr-shared";
+import { DbIdea, Discussion, Goal, Idea, User } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -23,7 +23,28 @@ app.use(keycloak.middleware());
 // ----------------------------------------------
 app.get('/goals', keycloak.protect(), async (req, res, next) => {
     try {
-        const docs = await getDocuments<Goal>(_getReqPath(req), "order");
+        const docs = await getDocuments<Goal>(_getReqPath(req), {field: "order", desc: false});
+        res.json(docs);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+app.get('/ideas', keycloak.protect(), async (req, res, next) => {
+    try {
+        const dbDocs = await getDocuments<DbIdea>(_getReqPath(req), {field: "date", desc: true});
+        const authorsToGet = _getUnique(dbDocs, "authorId");
+        const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
+        const [authors, goals] = await Promise.all([
+            getDocuments<User>("users", {field: "name", desc: false}, {field: "id", operator: "in", value: authorsToGet}),
+            getDocuments<Goal>("goals", {field: "name", desc: false}, {field: "id", operator: "in", value: goalsToGet})
+        ]);
+        const docs: Idea[] = dbDocs.map((dbDoc) => {
+            const {authorId, goalIds, ...data} = dbDoc;
+            data["author"] = authors.find(u => u.id === authorId);
+            data["goals"] = goals.filter(g => goalIds.includes(g.id));
+            return data as any // typescript?? 
+        });
         res.json(docs);
     } catch(err) { 
         next(err); 
@@ -32,7 +53,7 @@ app.get('/goals', keycloak.protect(), async (req, res, next) => {
 
 app.get('/discussions', keycloak.protect(), async (req, res, next) => {
     try {
-        const docs = await getDocuments<Discussion>(_getReqPath(req));
+        const docs = await getDocuments<Discussion>(_getReqPath(req), {field: "name", desc: false});
         res.json(docs);
     } catch(err) { 
         next(err); 
@@ -52,6 +73,22 @@ app.listen(port, () => {
 
 // private
 // ----------------------------------------------
+function _getUnique<T, U extends keyof T>(collection: T[], key: U): T[U][] {
+    return Array.from(collection.reduce((result, current) => {
+        result.add(current[key] as T[U]);
+        return result;
+    }, new Set<T[U]>).values());
+}
+
+function _getUniqueInArray<T, U extends keyof T>(collection: T[], key: U): T[U] {
+    return Array.from(collection.reduce((result, current) => {
+        (current[key] as any).forEach((item: any) => {
+            result.add(item);
+        });
+        return result;
+    }, new Set<any>).values()) as T[U];
+}
+
 function _errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
     console.error(chalk.red(`⚠️ ⚠️ ⚠️ ERROR AT ${new Date()}`));
     console.error(`------------------------------`);

@@ -6,6 +6,17 @@ const uri = "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaS
 const client = new MongoClient(uri);
 const db = client.db("sonddr");
 
+export type Order = {
+    field: string,
+    desc: boolean,
+};
+
+export type Filter = {
+    field: string,
+    operator: "in"|"eq",
+    value: any,
+};
+
 export async function getDocument<T extends Doc>(path: string): Promise<T> {
     const [collId, docId] = _parseDocumentPath(path);
     const coll = db.collection(collId);
@@ -14,20 +25,26 @@ export async function getDocument<T extends Doc>(path: string): Promise<T> {
     if (!dbDoc) {
         throw new NotFoundError();
     }
-    const doc = _replaceObjectIdWithId(dbDoc);
+    const doc = _convertDbDocToDoc(dbDoc);
     return doc as any;  // typescript??
 }
 
-export async function getDocuments<T extends Doc>(path: string, orderBy?: keyof T, desc: boolean = false): Promise<T[]> {
-    const coll = db.collection(path);
-    let cursor = coll.find();
-    if (orderBy) {
-        let sortObj: any = {};
-        sortObj[orderBy] = desc ? -1 : 1;
-        cursor = cursor.sort(sortObj);
-    }
+export async function getDocuments<T extends Doc>(path: string, order: Order): Promise<T[]>;
+export async function getDocuments<T extends Doc>(path: string, order: Order, filter: Filter): Promise<T[]>;
+export async function getDocuments<T extends Doc>(path: string, order: Order, filter?: Filter): Promise<T[]> {
+    // filter
+    let filterObj = filter ? _convertFilterToDbFilter(filter) : {};
+    // get
+    let cursor =  db.collection(path).find(filterObj);
+    // sort
+    let sortObj: any = {};
+    sortObj[order.field] = order.desc ? -1 : 1;
+    cursor = cursor.sort(sortObj);
+    // await
     const dbDocs = await cursor.toArray();
-    const docs = dbDocs.map(_replaceObjectIdWithId);
+    // format
+    const docs = dbDocs.map(_convertDbDocToDoc);
+    // return
     return docs as any;  // typescript??
 }
 
@@ -45,18 +62,14 @@ export async function postDocument(path: string, payload: object): Promise<strin
 export async function putDocument(path: string, payload: object): Promise<string> {
     const [collId, docId] = _parseDocumentPath(path);
     // handle 2 types of payloads: with or without an "id" field
-    let dbDoc: WithId<BSON.Document>;
     if ("id" in payload) {
         if (payload.id !== docId) {
             throw new Error(`Payload id does not match endpoint id: ${payload.id} != ${docId}`);
         }
-        dbDoc = _replaceIdWithObjectId(payload as Doc);
     } else {
-        dbDoc = { 
-            ...payload,
-            _id: _makeMongoId(docId), 
-        };
+        payload["id"] = docId;
     }
+    const dbDoc = _convertDocToDbDoc(payload as Doc);
     const coll = db.collection(collId);
     const result = await coll.insertOne(dbDoc);
     const _id = result.insertedId;
@@ -88,16 +101,54 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
 
 // private
 // ----------------------------------------------
-function _replaceObjectIdWithId(dbDoc: WithId<BSON.Document>): Doc {
-    const {_id, ...obj} = dbDoc;
-    obj.id = dbDoc._id.toString();
-    return obj as any;  // typescript??
+function _convertFilterToDbFilter(filter: Filter): any {
+    // handle value conversions
+    if (filter.field == "id" || filter.field.endsWith("Id")) {
+        filter.value = filter.value.map((x: string) => _makeMongoId(x));
+    }
+    if (filter.field == "id") { filter.field = "_id"; }
+    // format as db filter object
+    let filterObj: any = {};
+    switch (filter.operator) {
+        case "in": {
+            filterObj[filter.field] = {"$in": filter.value};
+            break;
+        }
+        default: {
+            throw new Error(`Unimplemented filter operator '${filter.operator}'`);
+        }
+    }
+    return filterObj;
 }
 
-function _replaceIdWithObjectId(doc: Doc): WithId<BSON.Document> {
-    const {id, ...dbDoc} = doc;
-    dbDoc._id = _makeMongoId(id);
-    return dbDoc as any;  // typescript??
+function _convertDbDocToDoc(dbDoc: WithId<BSON.Document>): Doc {
+    const doc: Doc = {id: dbDoc._id.toString()};
+    for (const [key, value] of Object.entries(dbDoc)) {
+        if (key == "_id") { continue; }
+        if (key.endsWith("Id")) { 
+            doc[key] = (value as ObjectId).toString();
+        } else if (key.endsWith("Ids")) {
+            doc[key] = (value as ObjectId[]).map(x => x.toString());
+        } else {
+            doc[key] = value;
+        }
+    }
+    return doc;
+}
+
+function _convertDocToDbDoc(doc: Doc): WithId<BSON.Document> {
+    const dbDoc: WithId<BSON.Document> = {_id: _makeMongoId(doc.id)};
+    for (const [key, value] of Object.entries(doc)) {
+        if (key == "id") { continue; }
+        if (key.endsWith("Id")) { 
+            doc[key] = _makeMongoId(value as string);
+        } else if (key.endsWith("Ids")) {
+            doc[key] = (value as string[]).map(x => _makeMongoId(x));
+        } else {
+            doc[key] = value;
+        }
+    }
+    return dbDoc;
 }
 
 // this cannot be changed recklessly because already inserted documents won't be able to be fetched anymore without a patch
