@@ -13,7 +13,7 @@ export type Order = {
 
 export type Filter = {
     field: string,
-    operator: "in"|"eq",
+    operator: "in"|"eq"|"nin",
     value: any,
 };
 
@@ -112,16 +112,10 @@ function _convertFilterToDbFilter(filter: Filter): any {
     }
     if (filter.field == "id") { filter.field = "_id"; }
     // format as db filter object
+    let filterValue: any = {};
+    filterValue[`$${filter.operator}`] = filter.value;
     let filterObj: any = {};
-    switch (filter.operator) {
-        case "in": {
-            filterObj[filter.field] = {"$in": filter.value};
-            break;
-        }
-        default: {
-            throw new Error(`Unimplemented filter operator '${filter.operator}'`);
-        }
-    }
+    filterObj[filter.field] = filterValue;
     return filterObj;
 }
 
