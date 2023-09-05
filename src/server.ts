@@ -30,9 +30,27 @@ app.get('/goals', keycloak.protect(), async (req, res, next) => {
     }
 });
 
+app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const doc = await getDocument<Goal>(_getReqPath(req));
+        res.json(doc);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
 app.get('/ideas', keycloak.protect(), async (req, res, next) => {
     try {
-        const dbDocs = await getDocuments<DbIdea>(_getReqPath(req), {field: "date", desc: true});
+        const dbDocs = await getDocuments<DbIdea>(
+            _getReqPath(req), 
+            {field: "date", desc: true}, 
+            undefined // TODO: filter based on query params
+        );
+        if (dbDocs.length == 0) { 
+            res.json([]); 
+            return; 
+        }
         const authorsToGet = _getUnique(dbDocs, "authorId");
         const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
         const [authors, goals] = await Promise.all([

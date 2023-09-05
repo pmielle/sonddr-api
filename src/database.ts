@@ -103,7 +103,11 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
 // ----------------------------------------------
 function _convertFilterToDbFilter(filter: Filter): any {
     // handle value conversions
-    if (filter.field == "id" || filter.field.endsWith("Id")) {
+    if (
+        filter.field == "id" 
+        || filter.field.endsWith("Id") 
+        || filter.field.endsWith("Ids")
+    ) {
         filter.value = filter.value.map((x: string) => _makeMongoId(x));
     }
     if (filter.field == "id") { filter.field = "_id"; }
