@@ -1,7 +1,7 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { Doc, NotFoundError } from "./types";
-import { Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
+import { Filter, Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
 import { DbIdea, Discussion, Goal, Idea, User } from "sonddr-shared";
 import session from "express-session";
@@ -42,10 +42,14 @@ app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
 
 app.get('/ideas', keycloak.protect(), async (req, res, next) => {
     try {
+        const goalId = req.query.goalId;
+        const filter: Filter|undefined = goalId 
+            ? {field: "goalIds", operator: "in", value: [goalId]} 
+            : undefined;
         const dbDocs = await getDocuments<DbIdea>(
             _getReqPath(req), 
             {field: "date", desc: true}, 
-            undefined // TODO: filter based on query params
+            filter
         );
         if (dbDocs.length == 0) { 
             res.json([]); 
