@@ -42,13 +42,14 @@ app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
 
 app.get('/ideas', keycloak.protect(), async (req, res, next) => {
     try {
+        const order = req.query.order || "date";
         const goalId = req.query.goalId;
         const filter: Filter|undefined = goalId 
             ? {field: "goalIds", operator: "in", value: [goalId]} 
             : undefined;
         const dbDocs = await getDocuments<DbIdea>(
             _getReqPath(req), 
-            {field: "date", desc: true}, 
+            {field: order as string, desc: true}, 
             filter
         );
         if (dbDocs.length == 0) { 
