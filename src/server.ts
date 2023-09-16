@@ -40,6 +40,24 @@ app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
     }
 });
 
+app.get('/ideas/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
+        const [author, goals] = await Promise.all([
+            getDocument<User>(`users/${dbDoc.authorId}`),
+            getDocuments<Goal>("goals", {field: "name", desc: false}, {field: "id", operator: "in", value: dbDoc.goalIds})
+        ]);
+        const {authorId, goalIds, ...data} = dbDoc;
+        data["author"] = author;
+        data["goals"] = goals;
+        const doc: Idea = data as Idea;
+        res.json(doc);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
 app.get('/ideas', keycloak.protect(), async (req, res, next) => {
     try {
         const order = req.query.order || "date";
