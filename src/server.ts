@@ -32,8 +32,16 @@ app.get('/goals', keycloak.protect(), async (req, res, next) => {
 
 app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
     try {
-        const id = req.params.id;
         const doc = await getDocument<Goal>(_getReqPath(req));
+        res.json(doc);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+app.get('/users/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const doc = await getDocument<User>(_getReqPath(req));
         res.json(doc);
     } catch(err) { 
         next(err); 
@@ -42,7 +50,6 @@ app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
 
 app.get('/ideas/:id', keycloak.protect(), async (req, res, next) => {
     try {
-        const id = req.params.id;
         const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
         const [author, goals] = await Promise.all([
             getDocument<User>(`users/${dbDoc.authorId}`),
