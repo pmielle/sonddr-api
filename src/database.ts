@@ -29,11 +29,11 @@ export async function getDocument<T extends Doc>(path: string): Promise<T> {
     return doc as any;  // typescript??
 }
 
-export async function getDocuments<T extends Doc>(path: string, order: Order): Promise<T[]>;
-export async function getDocuments<T extends Doc>(path: string, order: Order, filter: Filter): Promise<T[]>;
-export async function getDocuments<T extends Doc>(path: string, order: Order, filter?: Filter): Promise<T[]> {
+export async function getDocuments<T extends Doc>(path: string, order: Order, filter?: Filter|Filter[]): Promise<T[]> {
     // filter
-    let filterObj = filter ? _convertFilterToDbFilter(filter) : {};
+    let filterObj = filter 
+        ? _convertFiltersToDbFilter(Array.isArray(filter) ? filter : [filter]) 
+        : {};
     // get
     let cursor =  db.collection(path).find(filterObj);
     // sort
@@ -101,21 +101,29 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
 
 // private
 // ----------------------------------------------
-function _convertFilterToDbFilter(filter: Filter): any {
+function _convertFiltersToDbFilter(filters: Filter[]): any {
     // handle value conversions
-    if (
-        filter.field == "id" 
-        || filter.field.endsWith("Id") 
-        || filter.field.endsWith("Ids")
-    ) {
-        filter.value = filter.value.map((x: string) => _makeMongoId(x));
-    }
-    if (filter.field == "id") { filter.field = "_id"; }
+    filters = filters.map(filter => {
+        // values
+        const isAnIdField = /[Ii]ds?$/.test(filter.field);
+        if (isAnIdField) {
+            if (Array.isArray(filter.value)) {
+                filter.value = filter.value.map((x: string) => _makeMongoId(x));
+            } else {
+                filter.value = _makeMongoId(filter.value);
+            }
+        }
+        // fields
+        if (filter.field == "id") { filter.field = "_id"; }
+        return filter;
+    });
     // format as db filter object
-    let filterValue: any = {};
-    filterValue[`$${filter.operator}`] = filter.value;
     let filterObj: any = {};
-    filterObj[filter.field] = filterValue;
+    filters.forEach(filter => {
+        let filterValue: any = {};
+        filterValue[`$${filter.operator}`] = filter.value;
+        filterObj[filter.field] = filterValue;
+    });
     return filterObj;
 }
 

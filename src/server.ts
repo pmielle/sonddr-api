@@ -69,13 +69,18 @@ app.get('/ideas', keycloak.protect(), async (req, res, next) => {
     try {
         const order = req.query.order || "date";
         const goalId = req.query.goalId;
-        const filter: Filter|undefined = goalId 
-            ? {field: "goalIds", operator: "in", value: [goalId]} 
-            : undefined;
+        const authorId = req.query.authorId;
+        const filters: Filter[] = [];    
+        if (goalId) {
+            filters.push({field: "goalIds", operator: "in", value: [goalId]});
+        }    
+        if (authorId) {
+            filters.push({field: "authorId", operator: "eq", value: authorId});
+        }
         const dbDocs = await getDocuments<DbIdea>(
             _getReqPath(req), 
             {field: order as string, desc: true}, 
-            filter
+            filters
         );
         if (dbDocs.length == 0) { 
             res.json([]); 
