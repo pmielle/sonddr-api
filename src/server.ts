@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { Doc, NotFoundError } from "./types";
 import { Filter, Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { DbIdea, Discussion, Goal, Idea, User } from "sonddr-shared";
+import { DbComment, DbIdea, Discussion, Goal, Idea, User } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -96,6 +96,40 @@ app.get('/ideas', keycloak.protect(), async (req, res, next) => {
             const {authorId, goalIds, ...data} = dbDoc;
             data["author"] = authors.find(u => u.id === authorId);
             data["goals"] = goals.filter(g => goalIds.includes(g.id));
+            return data as any // typescript?? 
+        });
+        res.json(docs);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+app.get('/comments', keycloak.protect(), async (req, res, next) => {
+    try {
+        const order = req.query.order || "date";
+        const ideaId = req.query.ideaId;
+        const authorId = req.query.authorId;
+        const filters: Filter[] = [];    
+        if (ideaId) {
+            filters.push({field: "ideaId", operator: "eq", value: ideaId});
+        }    
+        if (authorId) {
+            filters.push({field: "authorId", operator: "eq", value: authorId});
+        }
+        const dbDocs = await getDocuments<DbComment>(
+            _getReqPath(req), 
+            {field: order as string, desc: true}, 
+            filters
+        );
+        if (dbDocs.length == 0) { 
+            res.json([]); 
+            return; 
+        }
+        const authorsToGet = _getUnique(dbDocs, "authorId");
+        const authors = await getDocuments<User>("users", {field: "name", desc: false}, {field: "id", operator: "in", value: authorsToGet});
+        const docs: Comment[] = dbDocs.map((dbDoc) => {
+            const {authorId, ...data} = dbDoc;
+            data["author"] = authors.find(u => u.id === authorId);
             return data as any // typescript?? 
         });
         res.json(docs);
