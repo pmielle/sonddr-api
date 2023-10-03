@@ -1,0 +1,16 @@
+[
+    {
+        "_id": {"$oid": "a82de3604b2f434e4a303d05"},
+        "discussionId": {"$oid": "4f28bf28fbb15e4155dadf6a"},
+        "authorId": {"$oid": "5df137bdcd6e1620f9fe27ac"},
+        "date": {"$date": "2023-10-02T07:51:02"},
+        "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque a lectus nec neque egestas feugiat. Mauris faucibus neque ac suscipit feugiat. Nunc dignissim ex non gravida aliquam. Suspendisse id vestibulum risus."
+    },
+    {
+        "_id": {"$oid": "f078dc1e52bba3dfe1557c61"},
+        "discussionId": {"$oid": "4f28bf28fbb15e4155dadf6a"},
+        "authorId": {"$oid": "5df137bdcd6e1620f9fe27ac"},
+        "date": {"$date": "2023-10-01T22:46:52"},
+        "content": "Lorem ipsum dolor sit amet"
+    }
+]
