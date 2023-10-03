@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { Doc, NotFoundError } from "./types";
 import { Filter, Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { DbComment, DbIdea, Discussion, Goal, Idea, User } from "sonddr-shared";
+import { DbComment, DbDiscussion, DbIdea, DbMessage, Discussion, Goal, Idea, Message, User } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -140,7 +140,35 @@ app.get('/comments', keycloak.protect(), async (req, res, next) => {
 
 app.get('/discussions', keycloak.protect(), async (req, res, next) => {
     try {
-        const docs = await getDocuments<Discussion>(_getReqPath(req), {field: "name", desc: false});
+        const dbDocs = await getDocuments<DbDiscussion>(_getReqPath(req), {field: "date", desc: false});
+        if (dbDocs.length == 0) { 
+            res.json([]); 
+            return; 
+        }
+        const messagesToGet = _getUnique(dbDocs, "lastMessageId");
+        let usersToGet = _getUniqueInArray(dbDocs, "userIds");
+        const messageDocs = await getDocuments<DbMessage>(
+            "messages",
+            undefined,
+            {field: "id", operator: "in", value: messagesToGet}
+        );
+        const users = await getDocuments<User>(
+            "users", 
+            undefined, 
+            {field: "id", operator: "in", value: usersToGet}
+        );
+        usersToGet.concat(_getUnique(messageDocs, "authorId"));
+        const messages: Message[] = messageDocs.map((dbDoc) => {
+            const {authorId, ...data} = dbDoc;
+            data["author"] = users.find(u => u.id === authorId);
+            return data as any;
+        });
+        const docs: Discussion[] = dbDocs.map((dbDoc) => {
+            const {userIds, lastMessageId, ...data} = dbDoc;
+            data["users"] = users.filter(u => userIds.includes(u.id));
+            data["lastMessage"] = messages.find(m => m.id === lastMessageId);
+            return data as any // typescript?? 
+        });
         res.json(docs);
     } catch(err) { 
         next(err); 

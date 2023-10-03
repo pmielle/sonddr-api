@@ -29,7 +29,7 @@ export async function getDocument<T extends Doc>(path: string): Promise<T> {
     return doc as any;  // typescript??
 }
 
-export async function getDocuments<T extends Doc>(path: string, order: Order, filter?: Filter|Filter[]): Promise<T[]> {
+export async function getDocuments<T extends Doc>(path: string, order?: Order, filter?: Filter|Filter[]): Promise<T[]> {
     // filter
     let filterObj = filter 
         ? _convertFiltersToDbFilter(Array.isArray(filter) ? filter : [filter]) 
@@ -37,8 +37,9 @@ export async function getDocuments<T extends Doc>(path: string, order: Order, fi
     // get
     let cursor =  db.collection(path).find(filterObj);
     // sort
-    let sortObj: any = {};
-    sortObj[order.field] = order.desc ? -1 : 1;
+    let sortObj = order 
+        ? _convertOrderToDbSort(order) 
+        : {};
     cursor = cursor.sort(sortObj);
     // await
     const dbDocs = await cursor.toArray();
@@ -101,6 +102,12 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
 
 // private
 // ----------------------------------------------
+function _convertOrderToDbSort(order: Order): any { 
+    let sortObj: any = {};
+    sortObj[order.field] = order.desc ? -1 : 1;
+    return sortObj;
+}
+
 function _convertFiltersToDbFilter(filters: Filter[]): any {
     // handle value conversions
     filters = filters.map(filter => {

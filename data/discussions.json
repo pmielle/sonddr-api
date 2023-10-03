@@ -5,6 +5,6 @@
             {"$oid": "098f6bcd4621d373cade4e83"},
             {"$oid": "5df137bdcd6e1620f9fe27ac"}
         ],
-        "lastMessage": {"$oid": "a82de3604b2f434e4a303d05"}
+        "lastMessageId": {"$oid": "a82de3604b2f434e4a303d05"}
     }
 ]
