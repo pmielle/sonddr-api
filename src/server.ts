@@ -175,6 +175,32 @@ app.get('/discussions', keycloak.protect(), async (req, res, next) => {
     }
 });
 
+app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
+        const messageDoc = await getDocument<DbMessage>(`messages/${dbDoc.lastMessageId}`);
+        const usersToGet = [
+            ...dbDoc.userIds,
+            messageDoc.authorId
+        ];
+        const users = await getDocuments<User>(
+            "users", 
+            undefined, 
+            {field: "id", operator: "in", value: usersToGet}
+        );
+        const {authorId, ...message} = messageDoc;
+        message["author"] = users.find(u => u.id === authorId);
+        
+        const {userIds, lastMessageId, ...doc} = dbDoc;
+        doc["users"] = users.filter(u => userIds.includes(u.id));
+        doc["lastMessage"] = message;
+        res.json(doc);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+
 app.get('/notifications', keycloak.protect(), async (req, res, next) => {
     try {
         const dbDocs = await getDocuments<DbNotification>(_getReqPath(req), {field: "date", desc: false});
