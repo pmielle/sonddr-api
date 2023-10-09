@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { Doc, NotFoundError } from "./types";
 import { Filter, Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { DbComment, DbDiscussion, DbIdea, DbMessage, Discussion, Goal, Idea, Message, User } from "sonddr-shared";
+import { DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -167,6 +167,30 @@ app.get('/discussions', keycloak.protect(), async (req, res, next) => {
             const {userIds, lastMessageId, ...data} = dbDoc;
             data["users"] = users.filter(u => userIds.includes(u.id));
             data["lastMessage"] = messages.find(m => m.id === lastMessageId);
+            return data as any // typescript?? 
+        });
+        res.json(docs);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+app.get('/notifications', keycloak.protect(), async (req, res, next) => {
+    try {
+        const dbDocs = await getDocuments<DbNotification>(_getReqPath(req), {field: "date", desc: false});
+        if (dbDocs.length == 0) { 
+            res.json([]); 
+            return; 
+        }
+        let usersToGet = _getUnique(dbDocs, "fromId");
+        const users = await getDocuments<User>(
+            "users", 
+            undefined, 
+            {field: "id", operator: "in", value: usersToGet}
+        );
+        const docs: Notification[] = dbDocs.map((dbDoc) => {
+            const {fromId, ...data} = dbDoc;
+            data["from"] = users.find(u => fromId === u.id);
             return data as any // typescript?? 
         });
         res.json(docs);
