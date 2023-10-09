@@ -89,8 +89,8 @@ app.get('/ideas', keycloak.protect(), async (req, res, next) => {
         const authorsToGet = _getUnique(dbDocs, "authorId");
         const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
         const [authors, goals] = await Promise.all([
-            getDocuments<User>("users", {field: "name", desc: false}, {field: "id", operator: "in", value: authorsToGet}),
-            getDocuments<Goal>("goals", {field: "name", desc: false}, {field: "id", operator: "in", value: goalsToGet})
+            getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet}),
+            getDocuments<Goal>("goals", undefined, {field: "id", operator: "in", value: goalsToGet})
         ]);
         const docs: Idea[] = dbDocs.map((dbDoc) => {
             const {authorId, goalIds, ...data} = dbDoc;
@@ -126,8 +126,41 @@ app.get('/comments', keycloak.protect(), async (req, res, next) => {
             return; 
         }
         const authorsToGet = _getUnique(dbDocs, "authorId");
-        const authors = await getDocuments<User>("users", {field: "name", desc: false}, {field: "id", operator: "in", value: authorsToGet});
+        const authors = await getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet});
         const docs: Comment[] = dbDocs.map((dbDoc) => {
+            const {authorId, ...data} = dbDoc;
+            data["author"] = authors.find(u => u.id === authorId);
+            return data as any // typescript?? 
+        });
+        res.json(docs);
+    } catch(err) { 
+        next(err); 
+    }
+});
+
+app.get('/messages', keycloak.protect(), async (req, res, next) => {
+    try {
+        const discussionId = req.query.discussionId;
+        const authorId = req.query.authorId;
+        const filters: Filter[] = [];    
+        if (discussionId) {
+            filters.push({field: "discussionId", operator: "eq", value: discussionId});
+        }    
+        if (authorId) {
+            filters.push({field: "authorId", operator: "eq", value: authorId});
+        }
+        const dbDocs = await getDocuments<DbMessage>(
+            _getReqPath(req), 
+            {field: "date", desc: true},
+            filters
+        );
+        if (dbDocs.length == 0) { 
+            res.json([]); 
+            return; 
+        }
+        const authorsToGet = _getUnique(dbDocs, "authorId");
+        const authors = await getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet});
+        const docs: Message[] = dbDocs.map((dbDoc) => {
             const {authorId, ...data} = dbDoc;
             data["author"] = authors.find(u => u.id === authorId);
             return data as any // typescript?? 
