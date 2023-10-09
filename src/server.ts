@@ -191,6 +191,7 @@ app.get('/notifications', keycloak.protect(), async (req, res, next) => {
         const docs: Notification[] = dbDocs.map((dbDoc) => {
             const {fromId, ...data} = dbDoc;
             data["from"] = users.find(u => fromId === u.id);
+            data.content = data.content.replaceAll(/@@from.name@@/g, data["from"].name);
             return data as any // typescript?? 
         });
         res.json(docs);
