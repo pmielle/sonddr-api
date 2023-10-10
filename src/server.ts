@@ -10,7 +10,7 @@ import KeycloakConnect from "keycloak-connect";
 const port = 3000;
 const app = express();
 app.use(express.json());  // otherwise req.body is undefined
-app.use(cors({origin: ["http://localhost:4200", "http://192.168.1.14:4200"]}));  // otherwise can't be reached by front
+app.use(cors({origin: "http://0.0.0.0:4200"}));  // otherwise can't be reached by front
 
 // authentication
 // ----------------------------------------------
@@ -264,7 +264,7 @@ app.get('/notifications', keycloak.protect(), async (req, res, next) => {
 // ----------------------------------------------
 app.use(_errorHandler);
 
-app.listen(port, '192.168.1.14', () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`Listening on port ${port}`);
     console.log(`\n`);
 });

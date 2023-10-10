@@ -2,7 +2,7 @@ import { MongoClient, ObjectId, BSON, WithId } from "mongodb";
 import { Doc, NotFoundError } from "./types";
 import crypto from "crypto";
 
-const uri = "mongodb://192.168.1.14:27017,192.168.1.14:27018,192.168.1.14:27019/?replicaSet=rs0&readPreference=primary&ssl=false";
+const uri = "mongodb://0.0.0.0:27017,0.0.0.0:27018,0.0.0.0:27019/?replicaSet=rs0&readPreference=primary&ssl=false";
 const client = new MongoClient(uri);
 const db = client.db("sonddr");
 
