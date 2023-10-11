@@ -19,17 +19,42 @@ app.use(session({secret: 'some secret', saveUninitialized: true, resave: false, 
 const keycloak = new KeycloakConnect({store: memoryStore});  // reads keycloak.json
 app.use(keycloak.middleware());
 
+async function fetchUserId(req: Request, res: Response, next: NextFunction) {
+    const token = (await keycloak.getGrant(req, res)).access_token;
+    const profile = await keycloak.grantManager.userInfo(token);
+    req["userId"] = profile["sub"];
+    next();
+}
+
 // routes
 // ----------------------------------------------
-app.put('/users/:id', keycloak.protect(), async (req, res, next) => {
+app.post('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const payload = {
-            id: _getFromReqBody("id", req),
+            title: _getFromReqBody("title", req),
+            authorId: req["userId"],
+            goalIds: _getFromReqBody("goalIds", req),
+            content: _getFromReqBody("content", req),
+            externalLinks: [],
+            date: new Date(),
+            supports: 0,
+        };
+        const insertedId = await postDocument(_getReqPath(req), payload);
+        res.json({insertedId: insertedId});
+    } catch(err) {
+        next(err);
+    }
+});
+
+app.put('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+    try {
+        const payload = {
+            id: req["userId"],
             name: _getFromReqBody("name", req),
             date: new Date(),
             bio: null,
         };
-        await putDocument(_getReqPath(req), payload);  // TODO: only allow creation of logged in user
+        await putDocument(_getReqPath(req), payload);
         res.send();
     } catch(err) {
         next(err);

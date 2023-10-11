@@ -55,22 +55,25 @@ export async function postDocument(path: string, payload: object): Promise<strin
         throw new Error(`id in POST payload is not allowed: use PUT instead`);
     }
     const coll = db.collection(path);
-    const result = await coll.insertOne(payload);
+    const dbDoc = _convertDocToDbDoc(payload, false);
+    const result = await coll.insertOne(dbDoc);
     const id = result.insertedId;
     return id.toString();
 }
 
 export async function putDocument(path: string, payload: object): Promise<void> {
     const [collId, docId] = _parseDocumentPath(path);
-    // handle 2 types of payloads: with or without an "id" field
+    // handle 2 types of payloads with or without "id" field
     if ("id" in payload) {
-        if (payload.id !== docId) {
-            throw new Error(`Payload id does not match endpoint id: ${payload.id} != ${docId}`);
+        const pathMongoId = _makeMongoId(docId);
+        const payloadMongoId = _makeMongoId(docId);
+        if (pathMongoId.toString() !== payloadMongoId.toString()) {
+            throw new Error(`Payload id does not match endpoint id: ${payloadMongoId} != ${pathMongoId}`);
         }
     } else {
         payload["id"] = docId;
     }
-    const dbDoc = _convertDocToDbDoc(payload as Doc);
+    const dbDoc = _convertDocToDbDoc(payload, true);
     const coll = db.collection(collId);
     await coll.insertOne(dbDoc);
 }
@@ -147,8 +150,19 @@ function _convertDbDocToDoc(dbDoc: WithId<BSON.Document>): Doc {
     return doc;
 }
 
-function _convertDocToDbDoc(doc: Doc): WithId<BSON.Document> {
-    const dbDoc: WithId<BSON.Document> = {_id: _makeMongoId(doc.id)};
+function _convertDocToDbDoc(doc: any, withId: boolean): any {
+    let dbDoc = {};
+    if (withId) {
+        let mongoId: ObjectId;
+        if ("_id" in doc) {
+            mongoId = _makeMongoId(doc._id);
+        } else if ("id" in doc) {
+            mongoId = _makeMongoId(doc.id);
+        } else {
+            throw new Error("Found neither '_id' nor 'id' in document");
+        }
+        dbDoc["_id"] = mongoId;
+    }
     for (const [key, value] of Object.entries(doc)) {
         if (key == "id") { continue; }
         if (key.endsWith("Id")) { 
