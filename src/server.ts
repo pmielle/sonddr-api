@@ -21,6 +21,21 @@ app.use(keycloak.middleware());
 
 // routes
 // ----------------------------------------------
+app.put('/users/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const payload = {
+            id: _getFromReqBody("id", req),
+            name: _getFromReqBody("name", req),
+            date: new Date(),
+            bio: null,
+        };
+        await putDocument(_getReqPath(req), payload);  // TODO: only allow creation of logged in user
+        res.send();
+    } catch(err) {
+        next(err);
+    };
+});
+
 app.get('/goals', keycloak.protect(), async (req, res, next) => {
     try {
         const docs = await getDocuments<Goal>(_getReqPath(req), {field: "order", desc: false});
@@ -272,6 +287,12 @@ app.listen(port, '0.0.0.0', () => {
 
 // private
 // ----------------------------------------------
+function _getFromReqBody<T>(key: string, req: Request): T {
+    const value = req.body[key];
+    if (value === undefined) { throw new Error(`${key} not found in request body`); }
+    return value;
+}
+
 function _getUnique<T, U extends keyof T>(collection: T[], key: U): T[U][] {
     return Array.from(collection.reduce((result, current) => {
         result.add(current[key] as T[U]);
@@ -293,6 +314,7 @@ function _errorHandler(err: Error, req: Request, res: Response, next: NextFuncti
     console.error(`------------------------------`);
     console.error(`REQUEST DETAILS`);
     console.error(`------------------------------`);
+    console.error(`method : ${req.method}`);
     console.error(`url    : ${req.originalUrl}`);
     console.error(`body   : ${JSON.stringify(req.body)}`);
     console.error(chalk.gray(`headers: ${JSON.stringify(req.headers)}`));

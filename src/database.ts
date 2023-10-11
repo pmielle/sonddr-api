@@ -60,7 +60,7 @@ export async function postDocument(path: string, payload: object): Promise<strin
     return id.toString();
 }
 
-export async function putDocument(path: string, payload: object): Promise<string> {
+export async function putDocument(path: string, payload: object): Promise<void> {
     const [collId, docId] = _parseDocumentPath(path);
     // handle 2 types of payloads: with or without an "id" field
     if ("id" in payload) {
@@ -72,9 +72,7 @@ export async function putDocument(path: string, payload: object): Promise<string
     }
     const dbDoc = _convertDocToDbDoc(payload as Doc);
     const coll = db.collection(collId);
-    const result = await coll.insertOne(dbDoc);
-    const _id = result.insertedId;
-    return _id.toString();
+    await coll.insertOne(dbDoc);
 }
 
 export async function deleteDocument(path: string): Promise<void> {
@@ -154,11 +152,11 @@ function _convertDocToDbDoc(doc: Doc): WithId<BSON.Document> {
     for (const [key, value] of Object.entries(doc)) {
         if (key == "id") { continue; }
         if (key.endsWith("Id")) { 
-            doc[key] = _makeMongoId(value as string);
+            dbDoc[key] = _makeMongoId(value as string);
         } else if (key.endsWith("Ids")) {
-            doc[key] = (value as string[]).map(x => _makeMongoId(x));
+            dbDoc[key] = (value as string[]).map(x => _makeMongoId(x));
         } else {
-            doc[key] = value;
+            dbDoc[key] = value;
         }
     }
     return dbDoc;
