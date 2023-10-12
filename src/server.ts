@@ -28,6 +28,24 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.get('/users', keycloak.protect(),async (req, res, next) => {
+    try {
+        const regex = req.query.regex;
+        const filters: Filter[] = [];        
+        if (regex) {
+            filters.push({field: "name", operator: "eq", value: regex});
+        }
+        const users = await getDocuments<User>(
+            _getReqPath(req), 
+            {field: 'name', desc: false},
+            filters
+        );
+        res.json(users);
+    } catch(err) {
+        next(err);
+    }
+});
+
 app.post('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const payload = {
