@@ -13,7 +13,7 @@ export type Order = {
 
 export type Filter = {
     field: string,
-    operator: "in"|"eq"|"nin",
+    operator: "in"|"eq"|"nin"|"regex",
     value: any,
 };
 
@@ -130,6 +130,9 @@ function _convertFiltersToDbFilter(filters: Filter[]): any {
     filters.forEach(filter => {
         let filterValue: any = {};
         filterValue[`$${filter.operator}`] = filter.value;
+        if (filter.operator === "regex") {
+            filterValue['$options'] = 'i';  // case insensitive
+        }
         filterObj[filter.field] = filterValue;
     });
     return filterObj;

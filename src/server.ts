@@ -33,7 +33,7 @@ app.get('/users', keycloak.protect(),async (req, res, next) => {
         const regex = req.query.regex;
         const filters: Filter[] = [];        
         if (regex) {
-            filters.push({field: "name", operator: "eq", value: regex});
+            filters.push({field: "name", operator: "regex", value: regex});
         }
         const users = await getDocuments<User>(
             _getReqPath(req), 
