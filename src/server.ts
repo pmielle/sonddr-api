@@ -28,7 +28,30 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
-app.get('/users', keycloak.protect(),async (req, res, next) => {
+app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next) => {
+    try {
+        const fromUserId = req["userId"];
+        const toUserId = _getFromReqBody("toUserId", req);
+        const firstMessageContent = _getFromReqBody("firstMessageContent", req);
+        const discussionPayload = {
+            userIds: [fromUserId, toUserId],
+        };
+        const discussionId = await postDocument(_getReqPath(req), discussionPayload);
+        const firstMessagePayload = {
+            discussionId: discussionId,
+            authorId: fromUserId,
+            content: firstMessageContent,
+            date: new Date(),
+        };
+        const firstMessageId = await postDocument('messages', firstMessagePayload);
+        await patchDocument(`discussions/${discussionId}`, {lastMessageId: firstMessageId});
+        res.json({insertedId: discussionId});
+    } catch(err) {
+        next(err);
+    };
+});
+
+app.get('/users', keycloak.protect(), async (req, res, next) => {
     try {
         const regex = req.query.regex;
         const filters: Filter[] = [];        

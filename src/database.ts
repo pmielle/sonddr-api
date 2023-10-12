@@ -95,9 +95,10 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
     if ("id" in payload) {
         throw new Error(`id in PATCH payload is not allowed`);
     }
+    const dbPayload = _convertDocToDbDoc(payload, false);
     const coll = db.collection(collId);
     const query = { _id: _makeMongoId(docId) };
-    await coll.updateOne(query, {$set: payload});
+    await coll.updateOne(query, {$set: dbPayload});
     return;
 }
 
