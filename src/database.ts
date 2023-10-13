@@ -102,6 +102,12 @@ export async function patchDocument<T extends Doc>(path: string, payload: Partia
     return;
 }
 
+export function compareIds(a: string, b: string) {
+    const mongoA = _makeMongoId(a);
+    const mongoB = _makeMongoId(b);
+    return mongoA.toString() === mongoB.toString();
+}
+
 // private
 // ----------------------------------------------
 function _convertOrderToDbSort(order: Order): any { 

@@ -1,7 +1,7 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { Doc, NotFoundError } from "./types";
-import { Filter, Order, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
+import { Filter, Order, compareIds, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
 import { DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User } from "sonddr-shared";
 import session from "express-session";
@@ -28,6 +28,26 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) => {
+    try {
+        const payload = {
+            discussionId: _getFromReqBody("discussionId", req),
+            content: _getFromReqBody("content", req),
+            authorId: req["userId"],
+            date: new Date(),
+        };
+        const discussion = await getDocument<DbDiscussion>(`discussions/${payload.discussionId}`);
+        if (! discussion.userIds.some(x => compareIds(x, payload.authorId))) {
+            throw new Error(`User ${payload.authorId} is not in discussion ${payload.discussionId}`);
+        }
+        const insertedId = await postDocument(_getReqPath(req), payload);
+        await patchDocument(`discussions/${payload.discussionId}`, {lastMessageId: insertedId});
+        res.json({insertedId: insertedId});
+    } catch(err) {
+        next(err);
+    }
+})
+
 app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const fromUserId = req["userId"];
