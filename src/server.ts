@@ -28,6 +28,34 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.get('/comments/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const dbDoc = await getDocument<DbComment>(_getReqPath(req));
+        const user = await getDocument<User>(`users/${dbDoc.authorId}`);
+        const {authorId, ...doc} = dbDoc;
+        doc["author"] = user;
+        res.json(doc);
+    } catch(err) {
+        next(err);
+    }
+});
+
+app.post('/comments', keycloak.protect(), fetchUserId ,async (req, res, next) => {
+    try {
+        const payload = {
+            ideaId: _getFromReqBody("ideaId", req),
+            content: _getFromReqBody("content", req),
+            authorId: req["userId"],
+            date: new Date(),
+            rating: 0,
+        };
+        const insertedId = await postDocument(_getReqPath(req), payload);
+        res.json({insertedId: insertedId});
+    } catch(err) {
+        next(err);
+    }
+});
+
 app.get('/messages/:id', keycloak.protect(), async (req, res, next) => {
     try {
         const dbDoc = await getDocument<DbMessage>(_getReqPath(req));
@@ -38,7 +66,7 @@ app.get('/messages/:id', keycloak.protect(), async (req, res, next) => {
     } catch(err) {
         next(err);
     }
-})
+});
 
 app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) => {
     try {
@@ -58,7 +86,7 @@ app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) =>
     } catch(err) {
         next(err);
     }
-})
+});
 
 app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
