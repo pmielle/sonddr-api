@@ -17,6 +17,12 @@ export type Filter = {
     value: any,
 };
 
+export type Patch = {
+    field: string,
+    operator: "set"|"inc",
+    value: any,
+};
+
 export async function getDocument<T extends Doc>(path: string): Promise<T> {
     const [collId, docId] = _parseDocumentPath(path);
     const coll = db.collection(collId);
@@ -89,16 +95,12 @@ export async function deleteDocument(path: string): Promise<void> {
     return;
 }
 
-export async function patchDocument<T extends Doc>(path: string, payload: Partial<T>): Promise<void> {
+export async function patchDocument(path: string, patches: Patch|Patch[]): Promise<void> {
     const [collId, docId] = _parseDocumentPath(path);
-    // do not allow "id" update
-    if ("id" in payload) {
-        throw new Error(`id in PATCH payload is not allowed`);
-    }
-    const dbPayload = _convertDocToDbDoc(payload, false);
+    let patchObj = _convertPatchesToDbPatch(Array.isArray(patches) ? patches : [patches]);
     const coll = db.collection(collId);
     const query = { _id: _makeMongoId(docId) };
-    await coll.updateOne(query, {$set: dbPayload});
+    await coll.updateOne(query, patchObj);
     return;
 }
 
@@ -110,6 +112,32 @@ export function compareIds(a: string, b: string) {
 
 // private
 // ----------------------------------------------
+function _convertPatchesToDbPatch(patches: Patch[]): any {
+    // handle value conversions
+    patches = patches.map(patch => {
+        // values
+        const isAnIdField = /[Ii]ds?$/.test(patch.field);
+        if (isAnIdField) {
+            if (Array.isArray(patch.value)) {
+                patch.value = patch.value.map((x: string) => _makeMongoId(x));
+            } else {
+                patch.value = _makeMongoId(patch.value);
+            }
+        }
+        // fields
+        if (patch.field == "id") { throw new Error("id field can't be patched"); }
+        return patch;
+    });
+    // format as db update object
+    let patchObj: any = {};
+    patches.forEach(filter => {
+        let filterValue: any = {};
+        filterValue[filter.field] = filter.value;
+        patchObj[`$${filter.operator}`] = filterValue;
+    });
+    return patchObj;
+}
+
 function _convertOrderToDbSort(order: Order): any { 
     let sortObj: any = {};
     sortObj[order.field] = order.desc ? -1 : 1;

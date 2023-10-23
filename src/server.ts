@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { Doc, NotFoundError } from "./types";
 import { Filter, Order, compareIds, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User } from "sonddr-shared";
+import { Cheer, DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, makeCheerId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -28,6 +28,33 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.get('/cheers/:id', keycloak.protect(), async (req, res, next) => {
+    try {
+        const doc = await getDocument<Cheer>(_getReqPath(req));
+        res.json(doc);
+    } catch(err) {
+        next(err);
+    }
+});
+
+app.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+    try {
+        const ideaId = _getFromReqBody("ideaId", req);
+        const userId = req["userId"];
+        const id = makeCheerId(ideaId as string, userId);        
+        const payload = {
+            id: id,
+            ideaId: ideaId,
+            authorId: userId,
+        };
+        await putDocument(_getReqPath(req), payload);
+        await patchDocument(`ideas/${ideaId}`, {field: "rating", operator: "inc", value: 1});
+        res.send();
+    } catch(err) {
+        next(err);
+    }
+});
+
 app.get('/comments/:id', keycloak.protect(), async (req, res, next) => {
     try {
         const dbDoc = await getDocument<DbComment>(_getReqPath(req));
@@ -81,7 +108,7 @@ app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) =>
             throw new Error(`User ${payload.authorId} is not in discussion ${payload.discussionId}`);
         }
         const insertedId = await postDocument(_getReqPath(req), payload);
-        await patchDocument(`discussions/${payload.discussionId}`, {lastMessageId: insertedId});
+        await patchDocument(`discussions/${payload.discussionId}`, {field: "lastMessageId", operator: "set", value: insertedId});
         res.json({insertedId: insertedId});
     } catch(err) {
         next(err);
@@ -104,7 +131,7 @@ app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next)
             date: new Date(),
         };
         const firstMessageId = await postDocument('messages', firstMessagePayload);
-        await patchDocument(`discussions/${discussionId}`, {lastMessageId: firstMessageId});
+        await patchDocument(`discussions/${discussionId}`, {field: "lastMessageId", operator: "set", value: firstMessageId});
         res.json({insertedId: discussionId});
     } catch(err) {
         next(err);
