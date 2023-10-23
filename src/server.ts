@@ -1,7 +1,7 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
-import { Doc, NotFoundError } from "./types";
-import { Filter, Order, compareIds, deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database";
+import { NotFoundError } from "./types";
+import { Filter, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
 import { Cheer, DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, makeCheerId } from "sonddr-shared";
 import session from "express-session";
@@ -22,7 +22,7 @@ app.use(keycloak.middleware());
 async function fetchUserId(req: Request, res: Response, next: NextFunction) {
     const token = (await keycloak.getGrant(req, res)).access_token;
     const profile = await keycloak.grantManager.userInfo(token);
-    req["userId"] = profile["sub"];
+    req["userId"] = makeMongoId(profile["sub"]).toString();
     next();
 }
 
@@ -48,7 +48,7 @@ app.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) =
             authorId: userId,
         };
         await putDocument(_getReqPath(req), payload);
-        await patchDocument(`ideas/${ideaId}`, {field: "rating", operator: "inc", value: 1});
+        await patchDocument(`ideas/${ideaId}`, {field: "supports", operator: "inc", value: 1});
         res.send();
     } catch(err) {
         next(err);
@@ -104,7 +104,7 @@ app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) =>
             date: new Date(),
         };
         const discussion = await getDocument<DbDiscussion>(`discussions/${payload.discussionId}`);
-        if (! discussion.userIds.some(x => compareIds(x, payload.authorId))) {
+        if (! discussion.userIds.includes(payload.authorId)) {
             throw new Error(`User ${payload.authorId} is not in discussion ${payload.discussionId}`);
         }
         const insertedId = await postDocument(_getReqPath(req), payload);

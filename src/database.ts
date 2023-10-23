@@ -26,7 +26,7 @@ export type Patch = {
 export async function getDocument<T extends Doc>(path: string): Promise<T> {
     const [collId, docId] = _parseDocumentPath(path);
     const coll = db.collection(collId);
-    const query = { _id: _makeMongoId(docId) };
+    const query = { _id: makeMongoId(docId) };
     const dbDoc = await coll.findOne(query);
     if (!dbDoc) {
         throw new NotFoundError();
@@ -71,8 +71,8 @@ export async function putDocument(path: string, payload: object): Promise<void> 
     const [collId, docId] = _parseDocumentPath(path);
     // handle 2 types of payloads with or without "id" field
     if ("id" in payload) {
-        const pathMongoId = _makeMongoId(docId);
-        const payloadMongoId = _makeMongoId(docId);
+        const pathMongoId = makeMongoId(docId);
+        const payloadMongoId = makeMongoId(docId);
         if (pathMongoId.toString() !== payloadMongoId.toString()) {
             throw new Error(`Payload id does not match endpoint id: ${payloadMongoId} != ${pathMongoId}`);
         }
@@ -87,7 +87,7 @@ export async function putDocument(path: string, payload: object): Promise<void> 
 export async function deleteDocument(path: string): Promise<void> {
     const [collId, docId] = _parseDocumentPath(path);
     const coll = db.collection(collId);
-    const query = { _id: _makeMongoId(docId) };
+    const query = { _id: makeMongoId(docId) };
     let result = await coll.deleteOne(query);
     if (result.deletedCount == 0) {
         throw new Error("0 documents were deleted");
@@ -99,15 +99,30 @@ export async function patchDocument(path: string, patches: Patch|Patch[]): Promi
     const [collId, docId] = _parseDocumentPath(path);
     let patchObj = _convertPatchesToDbPatch(Array.isArray(patches) ? patches : [patches]);
     const coll = db.collection(collId);
-    const query = { _id: _makeMongoId(docId) };
+    const query = { _id: makeMongoId(docId) };
     await coll.updateOne(query, patchObj);
     return;
 }
 
-export function compareIds(a: string, b: string) {
-    const mongoA = _makeMongoId(a);
-    const mongoB = _makeMongoId(b);
-    return mongoA.toString() === mongoB.toString();
+// this cannot be changed recklessly because already inserted documents won't be able to be fetched anymore without a patch
+export function makeMongoId(id: string): ObjectId {
+    const reqLength = 24;
+    let objectId: ObjectId;
+    try {
+        if (id.length == reqLength) {
+            objectId = new ObjectId(id);
+        } else {
+            const hash = crypto.createHash('md5').update(id).digest('hex');
+            const hashWithValidLength = hash.slice(0, reqLength);
+            objectId = new ObjectId(hashWithValidLength);
+        }
+    } catch(err) {
+        if (err instanceof BSON.BSONError) {
+            throw new Error(`Failed to convert ${id} into a mongo ObjectId: ${err}`);
+        }
+        throw err;
+    }
+    return objectId;
 }
 
 // private
@@ -119,9 +134,9 @@ function _convertPatchesToDbPatch(patches: Patch[]): any {
         const isAnIdField = /[Ii]ds?$/.test(patch.field);
         if (isAnIdField) {
             if (Array.isArray(patch.value)) {
-                patch.value = patch.value.map((x: string) => _makeMongoId(x));
+                patch.value = patch.value.map((x: string) => makeMongoId(x));
             } else {
-                patch.value = _makeMongoId(patch.value);
+                patch.value = makeMongoId(patch.value);
             }
         }
         // fields
@@ -151,9 +166,9 @@ function _convertFiltersToDbFilter(filters: Filter[]): any {
         const isAnIdField = /[Ii]ds?$/.test(filter.field);
         if (isAnIdField) {
             if (Array.isArray(filter.value)) {
-                filter.value = filter.value.map((x: string) => _makeMongoId(x));
+                filter.value = filter.value.map((x: string) => makeMongoId(x));
             } else {
-                filter.value = _makeMongoId(filter.value);
+                filter.value = makeMongoId(filter.value);
             }
         }
         // fields
@@ -193,9 +208,9 @@ function _convertDocToDbDoc(doc: any, withId: boolean): any {
     if (withId) {
         let mongoId: ObjectId;
         if ("_id" in doc) {
-            mongoId = _makeMongoId(doc._id);
+            mongoId = makeMongoId(doc._id);
         } else if ("id" in doc) {
-            mongoId = _makeMongoId(doc.id);
+            mongoId = makeMongoId(doc.id);
         } else {
             throw new Error("Found neither '_id' nor 'id' in document");
         }
@@ -204,35 +219,14 @@ function _convertDocToDbDoc(doc: any, withId: boolean): any {
     for (const [key, value] of Object.entries(doc)) {
         if (key == "id") { continue; }
         if (key.endsWith("Id")) { 
-            dbDoc[key] = _makeMongoId(value as string);
+            dbDoc[key] = makeMongoId(value as string);
         } else if (key.endsWith("Ids")) {
-            dbDoc[key] = (value as string[]).map(x => _makeMongoId(x));
+            dbDoc[key] = (value as string[]).map(x => makeMongoId(x));
         } else {
             dbDoc[key] = value;
         }
     }
     return dbDoc;
-}
-
-// this cannot be changed recklessly because already inserted documents won't be able to be fetched anymore without a patch
-function _makeMongoId(id: string): ObjectId {
-    const reqLength = 24;
-    let objectId: ObjectId;
-    try {
-        if (id.length == reqLength) {
-            objectId = new ObjectId(id);
-        } else {
-            const hash = crypto.createHash('md5').update(id).digest('hex');
-            const hashWithValidLength = hash.slice(0, reqLength);
-            objectId = new ObjectId(hashWithValidLength);
-        }
-    } catch(err) {
-        if (err instanceof BSON.BSONError) {
-            throw new Error(`Failed to convert ${id} into a mongo ObjectId: ${err}`);
-        }
-        throw err;
-    }
-    return objectId;
 }
 
 function _parseDocumentPath(path: string): [string, string] {  // returns collection and document ids
