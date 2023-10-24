@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { Cheer, DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, makeCheerId } from "sonddr-shared";
+import { Cheer, DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -28,6 +28,42 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+    try {
+        const value = _getFromReqBody<number>("value", req);
+        if (! [1, -1].includes(value)) { throw new Error(`Value must be 1 or -1`); }
+        const commentId = _getFromReqBody<string>("commentId", req);
+        const userId = req["userId"];
+        const voteId = makeVoteId(commentId, userId);
+        // get previous vote value to determine the new comment rating
+        let doc: Vote;
+        let valueDiff: number;
+        try {
+            doc = await getDocument<Vote>(_getReqPath(req));
+            valueDiff = value - doc.value;
+        } catch(err) {
+            if (! (err instanceof NotFoundError)) { throw err; }
+            valueDiff = value;
+        }
+        if (valueDiff !== 0) {
+            await patchDocument(
+                `comments/${commentId}`, 
+                {field: "rating", operator: "inc", value: valueDiff},
+            );
+        }
+        // put the vote, allow upsert
+        await putDocument(_getReqPath(req), {
+            id: voteId,
+            authorId: userId,
+            commentId: commentId,
+            value: value,
+        }, true);
+        res.send();
+    } catch(err) {
+        next(err);
+    }
+})
+
 app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const doc = await getDocument<Cheer>(_getReqPath(req));
@@ -36,6 +72,7 @@ app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next
         }
         await patchDocument(`ideas/${doc.ideaId}`, {field: "supports", operator: "inc", value: -1});
         await deleteDocument(_getReqPath(req));
+        res.send();
     } catch(err) {
         next(err);
     }

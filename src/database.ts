@@ -67,7 +67,7 @@ export async function postDocument(path: string, payload: object): Promise<strin
     return id.toString();
 }
 
-export async function putDocument(path: string, payload: object): Promise<void> {
+export async function putDocument(path: string, payload: object, upsert: boolean = false): Promise<void> {
     const [collId, docId] = _parseDocumentPath(path);
     // handle 2 types of payloads with or without "id" field
     if ("id" in payload) {
@@ -81,7 +81,12 @@ export async function putDocument(path: string, payload: object): Promise<void> 
     }
     const dbDoc = _convertDocToDbDoc(payload, true);
     const coll = db.collection(collId);
-    await coll.insertOne(dbDoc);
+    if (upsert) {
+        const query = { _id: makeMongoId(docId) };
+        await coll.replaceOne(query, dbDoc, {upsert: true});
+    } else {
+        await coll.insertOne(dbDoc);
+    }
 }
 
 export async function deleteDocument(path: string): Promise<void> {
