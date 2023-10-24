@@ -1,7 +1,7 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
-import { Filter, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
+import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
 import { Cheer, DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, makeCheerId } from "sonddr-shared";
 import session from "express-session";
@@ -28,6 +28,19 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+    try {
+        const doc = await getDocument<Cheer>(_getReqPath(req));
+        if (doc.authorId !== req["userId"]) {
+            throw new Error(`${req["userId"]} is not the author of the idea`);
+        }
+        await patchDocument(`ideas/${doc.ideaId}`, {field: "supports", operator: "inc", value: -1});
+        await deleteDocument(_getReqPath(req));
+    } catch(err) {
+        next(err);
+    }
+});
+
 app.get('/cheers/:id', keycloak.protect(), async (req, res, next) => {
     try {
         const doc = await getDocument<Cheer>(_getReqPath(req));
