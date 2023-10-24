@@ -105,12 +105,20 @@ app.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) =
     }
 });
 
-app.get('/comments/:id', keycloak.protect(), async (req, res, next) => {
+app.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const dbDoc = await getDocument<DbComment>(_getReqPath(req));
         const user = await getDocument<User>(`users/${dbDoc.authorId}`);
         const {authorId, ...doc} = dbDoc;
         doc["author"] = user;
+
+        // check if the user has voted
+        try {
+            const voteId = makeVoteId(dbDoc.id, req["userId"]);
+            const vote = await getDocument<Vote>(`votes/${voteId}`);
+            doc["userVote"] = vote.value;
+        } catch(err) { if (! (err instanceof NotFoundError)) { throw err; } }
+
         res.json(doc);
     } catch(err) {
         next(err);
@@ -326,7 +334,7 @@ app.get('/ideas', keycloak.protect(), async (req, res, next) => {
     }
 });
 
-app.get('/comments', keycloak.protect(), async (req, res, next) => {
+app.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const order = req.query.order || "date";
         const ideaId = req.query.ideaId;
@@ -349,9 +357,28 @@ app.get('/comments', keycloak.protect(), async (req, res, next) => {
         }
         const authorsToGet = _getUnique(dbDocs, "authorId");
         const authors = await getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet});
+        
+        // check if the user has voted for some of these
+        const votes = await Promise.all(dbDocs.map(dbDoc => {
+            const voteId = makeVoteId(dbDoc.id, req["userId"]);
+            return getDocument<Vote>(`votes/${voteId}`)
+                .catch(err => { 
+                    if (! (err instanceof NotFoundError)) { throw err; };
+                    return undefined;
+                })
+        }));
+        const userVotes = {};
+        votes.forEach(v => {
+            if (v === undefined) { return; }
+            userVotes[v["commentId"]] = v["value"];
+        });
+
         const docs: Comment[] = dbDocs.map((dbDoc) => {
             const {authorId, ...data} = dbDoc;
             data["author"] = authors.find(u => u.id === authorId);
+            if (dbDoc.id in userVotes) {
+                data["userVote"] = userVotes[dbDoc.id]
+            }
             return data as any // typescript?? 
         });
         res.json(docs);
