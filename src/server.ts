@@ -3,7 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { Cheer, DbComment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 
@@ -274,24 +274,31 @@ app.get('/users/:id', keycloak.protect(), async (req, res, next) => {
     }
 });
 
-app.get('/ideas/:id', keycloak.protect(), async (req, res, next) => {
+app.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
-        const [author, goals] = await Promise.all([
+        const cheerId = makeCheerId(dbDoc.id, req["userId"]);
+        const [author, goals, userHasCheered] = await Promise.all([
             getDocument<User>(`users/${dbDoc.authorId}`),
-            getDocuments<Goal>("goals", {field: "name", desc: false}, {field: "id", operator: "in", value: dbDoc.goalIds})
+            getDocuments<Goal>("goals", undefined, {field: "id", operator: "in", value: dbDoc.goalIds}),
+            getDocument<Cheer>(`cheers/${cheerId}`)
+                .then(() => true)
+                .catch<boolean>(err => {
+                    if (! (err instanceof NotFoundError)) { throw err; }
+                    return false;
+                }),
         ]);
         const {authorId, goalIds, ...data} = dbDoc;
         data["author"] = author;
         data["goals"] = goals;
-        const doc: Idea = data as Idea;
-        res.json(doc);
+        data["userHasCheered"] = userHasCheered;
+        res.json(data);
     } catch(err) { 
         next(err); 
     }
 });
 
-app.get('/ideas', keycloak.protect(), async (req, res, next) => {
+app.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const order = req.query.order || "date";
         const goalId = req.query.goalId;
@@ -318,14 +325,21 @@ app.get('/ideas', keycloak.protect(), async (req, res, next) => {
         }
         const authorsToGet = _getUnique(dbDocs, "authorId");
         const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
-        const [authors, goals] = await Promise.all([
+        const cheersToGet = _getUnique(dbDocs, "id");
+        const [authors, goals, cheers] = await Promise.all([
             getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet}),
-            getDocuments<Goal>("goals", undefined, {field: "id", operator: "in", value: goalsToGet})
+            getDocuments<Goal>("goals", undefined, {field: "id", operator: "in", value: goalsToGet}),
+            getDocuments<Cheer>("cheers", undefined, [
+                    {field: "ideaId", operator: "in", value: cheersToGet},
+                    {field: "authorId", operator: "eq", value: req["userId"]},
+                ]),
         ]);
+
         const docs: Idea[] = dbDocs.map((dbDoc) => {
             const {authorId, goalIds, ...data} = dbDoc;
             data["author"] = authors.find(u => u.id === authorId);
             data["goals"] = goals.filter(g => goalIds.includes(g.id));
+            data["userHasCheered"] = cheers.find(c => c.ideaId === dbDoc.id) ? true : false;
             return data as any // typescript?? 
         });
         res.json(docs);
@@ -356,29 +370,20 @@ app.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => 
             return; 
         }
         const authorsToGet = _getUnique(dbDocs, "authorId");
-        const authors = await getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet});
+        const votesToGet = _getUnique(dbDocs, "id");
+        const [authors, votes] = await Promise.all([
+            getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet}),
+            getDocuments<Vote>("votes", undefined, [
+                {field: "commentId", operator: "in", value: votesToGet},
+                {field: "authorId", operator: "eq", value: req["userId"]},
+            ]),
+        ]);
         
-        // check if the user has voted for some of these
-        const votes = await Promise.all(dbDocs.map(dbDoc => {
-            const voteId = makeVoteId(dbDoc.id, req["userId"]);
-            return getDocument<Vote>(`votes/${voteId}`)
-                .catch(err => { 
-                    if (! (err instanceof NotFoundError)) { throw err; };
-                    return undefined;
-                })
-        }));
-        const userVotes = {};
-        votes.forEach(v => {
-            if (v === undefined) { return; }
-            userVotes[v["commentId"]] = v["value"];
-        });
-
         const docs: Comment[] = dbDocs.map((dbDoc) => {
             const {authorId, ...data} = dbDoc;
             data["author"] = authors.find(u => u.id === authorId);
-            if (dbDoc.id in userVotes) {
-                data["userVote"] = userVotes[dbDoc.id]
-            }
+            const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
+            data["userVote"] = vote ? vote.value : undefined;
             return data as any // typescript?? 
         });
         res.json(docs);
