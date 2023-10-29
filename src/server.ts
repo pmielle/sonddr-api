@@ -28,6 +28,28 @@ async function fetchUserId(req: Request, res: Response, next: NextFunction) {
 
 // routes
 // ----------------------------------------------
+app.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+    try {
+        const doc = await getDocument<Vote>(_getReqPath(req));
+        if (doc.authorId !== req["userId"]) {
+            throw new Error(`${req["userId"]} is not the author of the vote`);
+        }
+        // get previous value and patch the rating of the comment
+        const previousValue = await getDocument<Vote>(_getReqPath(req))
+            .then(v => v.value)
+            .catch(err => {
+                if (! (err instanceof NotFoundError)) { throw err; }
+                return 0;
+            });
+        await patchDocument(`comments/${doc.commentId}`, {field: "rating", operator: "inc", value: -1 * previousValue});
+        // delete the vote
+        await deleteDocument(_getReqPath(req));
+        res.send();
+    } catch(err) {
+        next(err);
+    }
+});
+
 app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const value = _getFromReqBody<number>("value", req);
@@ -36,15 +58,13 @@ app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) =>
         const userId = req["userId"];
         const voteId = makeVoteId(commentId, userId);
         // get previous vote value to determine the new comment rating
-        let doc: Vote;
-        let valueDiff: number;
-        try {
-            doc = await getDocument<Vote>(_getReqPath(req));
-            valueDiff = value - doc.value;
-        } catch(err) {
-            if (! (err instanceof NotFoundError)) { throw err; }
-            valueDiff = value;
-        }
+        const previousValue = await getDocument<Vote>(_getReqPath(req))
+            .then(v => v.value)
+            .catch(err => {
+                if (! (err instanceof NotFoundError)) { throw err; }
+                return 0;
+            });
+        const valueDiff = value - previousValue;
         if (valueDiff !== 0) {
             await patchDocument(
                 `comments/${commentId}`, 
@@ -62,13 +82,13 @@ app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) =>
     } catch(err) {
         next(err);
     }
-})
+});
 
 app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
     try {
         const doc = await getDocument<Cheer>(_getReqPath(req));
         if (doc.authorId !== req["userId"]) {
-            throw new Error(`${req["userId"]} is not the author of the idea`);
+            throw new Error(`${req["userId"]} is not the author of the cheer`);
         }
         await patchDocument(`ideas/${doc.ideaId}`, {field: "supports", operator: "inc", value: -1});
         await deleteDocument(_getReqPath(req));
