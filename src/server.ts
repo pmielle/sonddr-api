@@ -6,6 +6,7 @@ import chalk from "chalk";
 import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
+import { SSE } from "./sse";
 
 const port = 3000;
 const app = express();
@@ -445,8 +446,11 @@ app.get('/messages', keycloak.protect(), async (req, res, next) => {
     }
 });
 
-app.get('/discussions', keycloak.protect(), async (req, res, next) => {
+app.get('/discussions', async (req, res, next) => {  // TODO: secure it
     try {
+
+        const sse = new SSE(res);
+
         const dbDocs = await getDocuments<DbDiscussion>(_getReqPath(req), {field: "date", desc: false});
         if (dbDocs.length == 0) { 
             res.json([]); 
@@ -476,7 +480,9 @@ app.get('/discussions', keycloak.protect(), async (req, res, next) => {
             data["lastMessage"] = messages.find(m => m.id === lastMessageId);
             return data as any // typescript?? 
         });
-        res.json(docs);
+        
+        sse.send(docs);
+
     } catch(err) { 
         next(err); 
     }
