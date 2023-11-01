@@ -514,8 +514,11 @@ app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 });
 
 
-app.get('/notifications', keycloak.protect(), async (req, res, next) => {
+app.get('/notifications', async (req, res, next) => {  // TODO: secure it
     try {
+
+        const sse = new SSE(res);
+
         const dbDocs = await getDocuments<DbNotification>(_getReqPath(req), {field: "date", desc: false});
         if (dbDocs.length == 0) { 
             res.json([]); 
@@ -533,7 +536,9 @@ app.get('/notifications', keycloak.protect(), async (req, res, next) => {
             data.content = data.content.replaceAll(/@@from.name@@/g, data["from"].name);
             return data as any // typescript?? 
         });
-        res.json(docs);
+        
+        sse.send(docs);
+
     } catch(err) { 
         next(err); 
     }
