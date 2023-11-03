@@ -188,7 +188,13 @@ app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) =>
             throw new Error(`User ${payload.authorId} is not in discussion ${payload.discussionId}`);
         }
         const insertedId = await postDocument(_getReqPath(req), payload);
-        await patchDocument(`discussions/${payload.discussionId}`, {field: "lastMessageId", operator: "set", value: insertedId});
+        await patchDocument(
+            `discussions/${payload.discussionId}`, 
+            [
+                {field: "lastMessageId", operator: "set", value: insertedId},
+                {field: "date", operator: "set", value: payload.date},
+            ]
+        );
         res.json({insertedId: insertedId});
     } catch(err) {
         next(err);
@@ -211,7 +217,13 @@ app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next)
             date: new Date(),
         };
         const firstMessageId = await postDocument('messages', firstMessagePayload);
-        await patchDocument(`discussions/${discussionId}`, {field: "lastMessageId", operator: "set", value: firstMessageId});
+        await patchDocument(
+            `discussions/${discussionId}`, 
+            [
+                {field: "lastMessageId", operator: "set", value: firstMessageId},
+                {field: "date", operator: "set", value: firstMessagePayload.date},
+            ]
+        );
         res.json({insertedId: discussionId});
     } catch(err) {
         next(err);
@@ -452,7 +464,7 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
 
         const sse = new SSE(res);
 
-        const dbDocs = await getDocuments<DbDiscussion>(_getReqPath(req), {field: "date", desc: false});
+        const dbDocs = await getDocuments<DbDiscussion>(_getReqPath(req), {field: "date", desc: true});
         const docs = await reviveDiscussions(dbDocs);
 
         sse.send(docs);

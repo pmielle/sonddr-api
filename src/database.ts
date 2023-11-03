@@ -219,10 +219,15 @@ function _convertPatchesToDbPatch(patches: Patch[]): any {
     });
     // format as db update object
     let patchObj: any = {};
-    patches.forEach(filter => {
-        let filterValue: any = {};
-        filterValue[filter.field] = filter.value;
-        patchObj[`$${filter.operator}`] = filterValue;
+    patches.forEach(patch => {
+        const operatorKey = `$${patch.operator}`;
+        if (operatorKey in patchObj) {
+            patchObj[operatorKey][patch.field] = patch.value;
+        } else {
+            const value: any = {};
+            value[patch.field] = patch.value;
+            patchObj[operatorKey] = value;
+        }            
     });
     return patchObj;
 }
