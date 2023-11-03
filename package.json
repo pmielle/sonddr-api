@@ -27,6 +27,7 @@
         "express-session": "^1.17.3",
         "keycloak-connect": "^22.0.1",
         "mongodb": "^5.7.0",
+        "rxjs": "^7.8.1",
         "sonddr-shared": "file:../shared"
     }
 }

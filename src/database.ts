@@ -1,6 +1,8 @@
 import { MongoClient, ObjectId, BSON, WithId } from "mongodb";
-import { Doc, NotFoundError } from "./types";
+import { NotFoundError } from "./types";
 import crypto from "crypto";
+import { Observable } from "rxjs";
+import { Change, Doc } from "sonddr-shared";
 
 const uri = "mongodb://0.0.0.0:27017,0.0.0.0:27018,0.0.0.0:27019/?replicaSet=rs0&readPreference=primary&ssl=false";
 const client = new MongoClient(uri);
@@ -22,6 +24,73 @@ export type Patch = {
     operator: "set"|"inc",
     value: any,
 };
+
+export function watchCollection<T>(path: string): Observable<Change<T>> {
+    const changes = db.collection(path).watch([], {fullDocument: "updateLookup"});
+    return new Observable((subscriber) => {
+        changes.on("change", (change) => {
+            switch (change.operationType) {
+
+                case "delete": {
+                    const docId = change.documentKey._id.toString();
+                    subscriber.next({
+                        type: "delete", 
+                        docId: docId,
+                        payload: undefined,
+                    });
+                    break;
+                }
+
+                case "insert": {
+                    const dbDoc = change.fullDocument;
+                    const payload = _convertDbDocToDoc(dbDoc);
+                    const docId = payload.id;
+                    subscriber.next({
+                        type: "insert", 
+                        docId: docId, 
+                        payload: payload as T,
+                    });
+                    break;
+                }
+
+                case "update": {
+                    const dbDoc = change.fullDocument;
+                    const payload = _convertDbDocToDoc(dbDoc);
+                    const docId = payload.id;
+                    subscriber.next({
+                        type: "update", 
+                        docId: docId, 
+                        payload: payload as T,
+                    });
+                    break;
+                }
+
+                case "replace": {
+                    const dbDoc = change.fullDocument;
+                    const payload = _convertDbDocToDoc(dbDoc);
+                    const docId = payload.id;
+                    subscriber.next({
+                        type: "update", 
+                        docId: docId, 
+                        payload: payload as T,
+                    });
+                    break;
+                }
+
+                default: {
+                    return;
+                }
+            }
+
+        });
+        changes.on("error", (err) => subscriber.error(err));
+
+        return () => {
+            changes.close();
+        };
+
+    });
+}
 
 export async function getDocument<T extends Doc>(path: string): Promise<T> {
     const [collId, docId] = _parseDocumentPath(path);
@@ -193,7 +262,7 @@ function _convertFiltersToDbFilter(filters: Filter[]): any {
     return filterObj;
 }
 
-function _convertDbDocToDoc(dbDoc: WithId<BSON.Document>): Doc {
+function _convertDbDocToDoc(dbDoc: BSON.Document): Doc {
     const doc: Doc = {id: dbDoc._id.toString()};
     for (const [key, value] of Object.entries(dbDoc)) {
         if (key == "_id") { continue; }

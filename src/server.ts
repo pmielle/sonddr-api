@@ -1,12 +1,13 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
-import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
+import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument, watchCollection } from "./database";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId, Change } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse";
+import { reviveDiscussion, reviveDiscussions, reviveNotification, reviveNotifications } from "./revivers";
 
 const port = 3000;
 const app = express();
@@ -452,36 +453,25 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
         const sse = new SSE(res);
 
         const dbDocs = await getDocuments<DbDiscussion>(_getReqPath(req), {field: "date", desc: false});
-        if (dbDocs.length == 0) { 
-            res.json([]); 
-            return; 
-        }
-        const messagesToGet = _getUnique(dbDocs, "lastMessageId");
-        let usersToGet = _getUniqueInArray(dbDocs, "userIds");
-        const messageDocs = await getDocuments<DbMessage>(
-            "messages",
-            undefined,
-            {field: "id", operator: "in", value: messagesToGet}
-        );
-        const users = await getDocuments<User>(
-            "users", 
-            undefined, 
-            {field: "id", operator: "in", value: usersToGet}
-        );
-        usersToGet.concat(_getUnique(messageDocs, "authorId"));
-        const messages: Message[] = messageDocs.map((dbDoc) => {
-            const {authorId, ...data} = dbDoc;
-            data["author"] = users.find(u => u.id === authorId);
-            return data as any;
-        });
-        const docs: Discussion[] = dbDocs.map((dbDoc) => {
-            const {userIds, lastMessageId, ...data} = dbDoc;
-            data["users"] = users.filter(u => userIds.includes(u.id));
-            data["lastMessage"] = messages.find(m => m.id === lastMessageId);
-            return data as any // typescript?? 
-        });
-        
+        const docs = await reviveDiscussions(dbDocs);
+
         sse.send(docs);
+
+        const watchSub = watchCollection<DbDiscussion>(_getReqPath(req)).subscribe(async change => {
+            let revivedPayload: Discussion;
+            if (change.payload) {
+                revivedPayload = await reviveDiscussion(change.payload);
+            }
+            const revivedChange: Change<Discussion> = {
+                ...change,
+                payload: revivedPayload,
+            }; 
+            sse.send(revivedChange);
+        });
+
+        req.on("close", () => {
+            watchSub.unsubscribe();
+        });
 
     } catch(err) { 
         next(err); 
@@ -491,22 +481,7 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
 app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
     try {
         const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
-        const messageDoc = await getDocument<DbMessage>(`messages/${dbDoc.lastMessageId}`);
-        const usersToGet = [
-            ...dbDoc.userIds,
-            messageDoc.authorId
-        ];
-        const users = await getDocuments<User>(
-            "users", 
-            undefined, 
-            {field: "id", operator: "in", value: usersToGet}
-        );
-        const {authorId, ...message} = messageDoc;
-        message["author"] = users.find(u => u.id === authorId);
-        
-        const {userIds, lastMessageId, ...doc} = dbDoc;
-        doc["users"] = users.filter(u => userIds.includes(u.id));
-        doc["lastMessage"] = message;
+        const doc = await reviveDiscussion(dbDoc);
         res.json(doc);
     } catch(err) { 
         next(err); 
@@ -520,24 +495,22 @@ app.get('/notifications', async (req, res, next) => {  // TODO: secure it
         const sse = new SSE(res);
 
         const dbDocs = await getDocuments<DbNotification>(_getReqPath(req), {field: "date", desc: false});
-        if (dbDocs.length == 0) { 
-            res.json([]); 
-            return; 
-        }
-        let usersToGet = _getUnique(dbDocs, "fromId");
-        const users = await getDocuments<User>(
-            "users", 
-            undefined, 
-            {field: "id", operator: "in", value: usersToGet}
-        );
-        const docs: Notification[] = dbDocs.map((dbDoc) => {
-            const {fromId, ...data} = dbDoc;
-            data["from"] = users.find(u => fromId === u.id);
-            data.content = data.content.replaceAll(/@@from.name@@/g, data["from"].name);
-            return data as any // typescript?? 
-        });
-        
+        const docs = await reviveNotifications(dbDocs);
+
         sse.send(docs);
+
+        const watchSub = watchCollection<DbNotification>(_getReqPath(req)).subscribe(async change => {
+            const revivedPayload = await reviveNotification(change.payload);
+            const revivedChange: Change<Notification> = {
+                ...change,
+                payload: revivedPayload,
+            }; 
+            sse.send(revivedChange);
+        });
+
+        req.on("close", () => {
+            watchSub.unsubscribe();
+        });
 
     } catch(err) { 
         next(err); 
@@ -557,26 +530,18 @@ app.listen(port, '0.0.0.0', () => {
 
 // private
 // ----------------------------------------------
+function _getReqPath(req: Request): string {
+    let path = req.path;
+    if (path.charAt(0) == "/") { 
+        path = path.substring(1); 
+    }
+    return path;
+}
+
 function _getFromReqBody<T>(key: string, req: Request): T {
     const value = req.body[key];
     if (value === undefined) { throw new Error(`${key} not found in request body`); }
     return value;
-}
-
-function _getUnique<T, U extends keyof T>(collection: T[], key: U): T[U][] {
-    return Array.from(collection.reduce((result, current) => {
-        result.add(current[key] as T[U]);
-        return result;
-    }, new Set<T[U]>).values());
-}
-
-function _getUniqueInArray<T, U extends keyof T>(collection: T[], key: U): T[U] {
-    return Array.from(collection.reduce((result, current) => {
-        (current[key] as any).forEach((item: any) => {
-            result.add(item);
-        });
-        return result;
-    }, new Set<any>).values()) as T[U];
 }
 
 function _errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
@@ -600,10 +565,18 @@ function _errorHandler(err: Error, req: Request, res: Response, next: NextFuncti
     }
 }
 
-function _getReqPath(req: Request): string {
-    let path = req.path;
-    if (path.charAt(0) == "/") { 
-        path = path.substring(1); 
-    }
-    return path;
+function _getUnique<T, U extends keyof T>(collection: T[], key: U): T[U][] {
+    return Array.from(collection.reduce((result, current) => {
+        result.add(current[key] as T[U]);
+        return result;
+    }, new Set<T[U]>).values());
+}
+
+function _getUniqueInArray<T, U extends keyof T>(collection: T[], key: U): T[U] {
+    return Array.from(collection.reduce((result, current) => {
+        (current[key] as any).forEach((item: any) => {
+            result.add(item);
+        });
+        return result;
+    }, new Set<any>).values()) as T[U];
 }
