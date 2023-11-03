@@ -462,14 +462,21 @@ app.get('/messages', keycloak.protect(), async (req, res, next) => {
 app.get('/discussions', async (req, res, next) => {  // TODO: secure it
     try {
 
+        const userId = "9bdd8262d7f97411c6391278";  // TODO: get userId from req eventually
+        const filter: Filter = {field: "userIds", operator: "in", value: [userId] };
+
         const sse = new SSE(res);
 
-        const dbDocs = await getDocuments<DbDiscussion>(_getReqPath(req), {field: "date", desc: true});
+        const dbDocs = await getDocuments<DbDiscussion>(
+            _getReqPath(req), 
+            {field: "date", desc: true},
+            {...filter},  // otherwise can't be reused in watch()
+        );
         const docs = await reviveDiscussions(dbDocs);
 
         sse.send(docs);
 
-        const watchSub = watchCollection<DbDiscussion>(_getReqPath(req)).subscribe(async change => {
+        const watchSub = watchCollection<DbDiscussion>(_getReqPath(req), filter).subscribe(async change => {
             let revivedPayload: Discussion;
             if (change.payload) {
                 revivedPayload = await reviveDiscussion(change.payload);

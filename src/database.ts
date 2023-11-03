@@ -25,8 +25,14 @@ export type Patch = {
     value: any,
 };
 
-export function watchCollection<T>(path: string): Observable<Change<T>> {
-    const changes = db.collection(path).watch([], {fullDocument: "updateLookup"});
+export function watchCollection<T>(path: string, filter?: Filter|Filter[]): Observable<Change<T>> {
+    // build the aggregation pipeline
+    const filterObj = filter 
+        ? _convertFiltersToDbFilter(Array.isArray(filter) ? filter : [filter], true) 
+        : {};
+    const pipeline = [{'$match': filterObj}];
+    // watch changes
+    const changes = db.collection(path).watch(pipeline, {fullDocument: "updateLookup"});
     return new Observable((subscriber) => {
         changes.on("change", (change) => {
             switch (change.operationType) {
@@ -238,7 +244,7 @@ function _convertOrderToDbSort(order: Order): any {
     return sortObj;
 }
 
-function _convertFiltersToDbFilter(filters: Filter[]): any {
+function _convertFiltersToDbFilter(filters: Filter[], addFullDocument = false): any {
     // handle value conversions
     filters = filters.map(filter => {
         // values
@@ -257,11 +263,15 @@ function _convertFiltersToDbFilter(filters: Filter[]): any {
     // format as db filter object
     let filterObj: any = {};
     filters.forEach(filter => {
+        // field
+        if (addFullDocument) { filter.field = `fullDocument.${filter.field}`}
+        // value
         let filterValue: any = {};
         filterValue[`$${filter.operator}`] = filter.value;
         if (filter.operator === "regex") {
             filterValue['$options'] = 'i';  // case insensitive
         }
+        // assign
         filterObj[filter.field] = filterValue;
     });
     return filterObj;
