@@ -1,7 +1,7 @@
 [
     {
         "_id": {"$oid": "4ff478a07af1c096dd5d0262"},
-        "fromId": {"$oid": "5df137bdcd6e1620f9fe27ac"},
+        "toId": {"$oid": "5df137bdcd6e1620f9fe27ac"},
         "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque a lectus nec neque egestas feugiat. Mauris faucibus neque ac suscipit feugiat. Nunc dignissim ex non gravida aliquam. Suspendisse id vestibulum risus.",
         "date": {"$date": "2023-10-09T10:59:33"}
     }

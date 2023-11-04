@@ -3,11 +3,11 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument, watchCollection } from "./database";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, DbNotification, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId, Change } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId, Change } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse";
-import { reviveDiscussion, reviveDiscussions, reviveNotification, reviveNotifications } from "./revivers";
+import { reviveDiscussion, reviveDiscussions } from "./revivers";
 
 const port = 3000;
 const app = express();
@@ -476,7 +476,10 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
 
         sse.send(docs);
 
-        const watchSub = watchCollection<DbDiscussion>(_getReqPath(req), filter).subscribe(async change => {
+        const watchSub = watchCollection<DbDiscussion>(
+            _getReqPath(req), 
+            filter,
+        ).subscribe(async change => {
             let revivedPayload: Discussion;
             if (change.payload) {
                 revivedPayload = await reviveDiscussion(change.payload);
@@ -488,9 +491,7 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
             sse.send(revivedChange);
         });
 
-        req.on("close", () => {
-            watchSub.unsubscribe();
-        });
+        req.on("close", () => watchSub.unsubscribe());
 
     } catch(err) { 
         next(err); 
@@ -511,25 +512,25 @@ app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 app.get('/notifications', async (req, res, next) => {  // TODO: secure it
     try {
 
+        const userId = "9bdd8262d7f97411c6391278";  // TODO: get userId from req eventually
+        const filter: Filter = {field: "toId", operator: "eq", value: userId };
+
         const sse = new SSE(res);
 
-        const dbDocs = await getDocuments<DbNotification>(_getReqPath(req), {field: "date", desc: false});
-        const docs = await reviveNotifications(dbDocs);
+        const docs = await getDocuments<Notification>(
+            _getReqPath(req), 
+            {field: "date", desc: true},
+            {...filter},  // otherwise can't be reused in watch()
+        );
 
         sse.send(docs);
 
-        const watchSub = watchCollection<DbNotification>(_getReqPath(req)).subscribe(async change => {
-            const revivedPayload = await reviveNotification(change.payload);
-            const revivedChange: Change<Notification> = {
-                ...change,
-                payload: revivedPayload,
-            }; 
-            sse.send(revivedChange);
-        });
+        const watchSub = watchCollection<Notification>(
+            _getReqPath(req), 
+            filter,
+        ).subscribe((change) => sse.send(change));
 
-        req.on("close", () => {
-            watchSub.unsubscribe();
-        });
+        req.on("close", () => watchSub.unsubscribe());
 
     } catch(err) { 
         next(err); 

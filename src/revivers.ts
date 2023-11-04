@@ -1,34 +1,5 @@
-import { DbDiscussion, DbMessage, DbNotification, Notification, Discussion, Doc, Message, User } from "sonddr-shared";
+import { DbDiscussion, DbMessage, Discussion, Doc, Message, User } from "sonddr-shared";
 import { getDocuments } from "./database";
-
-
-export async function reviveNotification(dbDoc: DbNotification): Promise<Notification> {
-    return (await reviveNotifications([dbDoc]))[0];
-}
-
-export async function reviveNotifications(dbDocs: DbNotification[]): Promise<Notification[]> {
-
-    if (dbDocs.length == 0) { return []; }
-
-    // get users
-    let usersToGet = _getUnique(dbDocs, "fromId");
-    const users = await getDocuments<User>(
-        "users", 
-        undefined, 
-        {field: "id", operator: "in", value: usersToGet}
-    );
-
-    // convert dbDocs into docs
-    const docs: Notification[] = dbDocs.map((dbDoc) => {
-        const {fromId, ...data} = dbDoc;
-        data["from"] = users.find(u => fromId === u.id);
-        data.content = data.content.replaceAll(/@@from.name@@/g, data["from"].name);
-        return data as any // typescript?? 
-    });
-
-    // return
-    return docs;
-}
 
 
 export async function reviveDiscussion(dbDoc: DbDiscussion): Promise<Discussion> {
