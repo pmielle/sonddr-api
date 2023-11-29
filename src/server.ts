@@ -1,16 +1,18 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types";
-import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument, watchCollection } from "./database";
+import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, Discussion, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId, Change } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse";
 import { reviveDiscussion, reviveDiscussions } from "./revivers";
+import expressWs from "express-ws";
+import { ChatRoom, ChatRoomManager } from "./chat-room";
 
 const port = 3000;
-const app = express();
+const app = expressWs(express()).app;  // enable websocket routes
 app.use(express.json());  // otherwise req.body is undefined
 app.use(cors({origin: "http://0.0.0.0:4200"}));  // otherwise can't be reached by front
 
@@ -426,34 +428,11 @@ app.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => 
     }
 });
 
-app.get('/messages', keycloak.protect(), async (req, res, next) => {
+app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
     try {
-        const discussionId = req.query.discussionId;
-        const authorId = req.query.authorId;
-        const filters: Filter[] = [];    
-        if (discussionId) {
-            filters.push({field: "discussionId", operator: "eq", value: discussionId});
-        }    
-        if (authorId) {
-            filters.push({field: "authorId", operator: "eq", value: authorId});
-        }
-        const dbDocs = await getDocuments<DbMessage>(
-            _getReqPath(req), 
-            {field: "date", desc: true},
-            filters
-        );
-        if (dbDocs.length == 0) { 
-            res.json([]); 
-            return; 
-        }
-        const authorsToGet = _getUnique(dbDocs, "authorId");
-        const authors = await getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet});
-        const docs: Message[] = dbDocs.map((dbDoc) => {
-            const {authorId, ...data} = dbDoc;
-            data["author"] = authors.find(u => u.id === authorId);
-            return data as any // typescript?? 
-        });
-        res.json(docs);
+        const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
+        const doc = await reviveDiscussion(dbDoc);
+        res.json(doc);
     } catch(err) { 
         next(err); 
     }
@@ -476,38 +455,16 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
 
         sse.send(docs);
 
-        const watchSub = watchCollection<DbDiscussion>(
-            _getReqPath(req), 
-            filter,
-        ).subscribe(async change => {
-            let revivedPayload: Discussion;
-            if (change.payload) {
-                revivedPayload = await reviveDiscussion(change.payload);
-            }
-            const revivedChange: Change<Discussion> = {
-                ...change,
-                payload: revivedPayload,
-            }; 
-            sse.send(revivedChange);
+        // TODO: react to the main db watcher and send updates
+
+        req.on("close", () => {
+            // TODO: unsub from main db watcher 
         });
 
-        req.on("close", () => watchSub.unsubscribe());
-
     } catch(err) { 
         next(err); 
     }
 });
-
-app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
-    try {
-        const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
-        const doc = await reviveDiscussion(dbDoc);
-        res.json(doc);
-    } catch(err) { 
-        next(err); 
-    }
-});
-
 
 app.get('/notifications', async (req, res, next) => {  // TODO: secure it
     try {
@@ -525,16 +482,53 @@ app.get('/notifications', async (req, res, next) => {  // TODO: secure it
 
         sse.send(docs);
 
-        const watchSub = watchCollection<Notification>(
-            _getReqPath(req), 
-            filter,
-        ).subscribe((change) => sse.send(change));
+        // TODO: react to the main db watcher and send updates
 
-        req.on("close", () => watchSub.unsubscribe());
+        req.on("close", () => {
+            // TODO: unsub from main db watcher 
+        });
 
     } catch(err) { 
         next(err); 
     }
+});
+
+
+// websockets
+// ----------------------------------------------
+const roomManager = new ChatRoomManager();
+
+app.ws('/messages', (ws, req, next) => {
+    try {
+
+        const userId = "9bdd8262d7f97411c6391278";
+        const discussionId = _getFromReqQuery<string>("discussionId", req);
+
+        let room: ChatRoom;
+        ws.on("open", () => {
+            room = roomManager.getOrCreateRoom(discussionId, userId, ws);
+            // n.b. no need to send previous messages, ChatRoom does it
+        }); 
+        
+        ws.on("message", (data) => {
+            const payload = {
+                discussionId: discussionId,
+                authorId: userId,
+                date: new Date(),
+                content: data.toString(),
+            };
+            postDocument(`/messages`, payload);
+            // n.b. no need to dispatch anything, ChatRoom reacts to database changes
+        });
+
+        ws.on("close", () => {
+            room.leave(userId);
+        });
+
+    } catch(err) {
+        next(err);
+    }
+
 });
 
 
@@ -562,6 +556,12 @@ function _getFromReqBody<T>(key: string, req: Request): T {
     const value = req.body[key];
     if (value === undefined) { throw new Error(`${key} not found in request body`); }
     return value;
+}
+
+function _getFromReqQuery<T>(key: string, req: Request): T {
+    const value = req.query[key];
+    if (value === undefined) { throw new Error(`${key} not found in request query parameters`); }
+    return value as T;
 }
 
 function _errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {

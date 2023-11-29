@@ -2,6 +2,34 @@ import { DbDiscussion, DbMessage, Discussion, Doc, Message, User } from "sonddr-
 import { getDocuments } from "./database";
 
 
+export async function reviveMessage(dbDoc: DbMessage): Promise<Message> {
+    return (await reviveMessages([dbDoc]))[0];
+}
+
+export async function reviveMessages(dbDocs: DbMessage[]): Promise<Message[]> {
+
+    if (dbDocs.length == 0) { return []; }
+
+    // get users
+    let usersToGet = _getUniqueInArray(dbDocs, "authorId");
+    const users = await getDocuments<User>(
+        "users", 
+        undefined, 
+        {field: "id", operator: "in", value: usersToGet}
+    );
+
+    // convert dbDocs into docs
+    const docs: Message[] = dbDocs.map((dbDoc) => {
+        const {authorId, ...data} = dbDoc;
+        data["author"] = users.find(u => u.id === authorId);
+        return data as any;
+    });
+
+    // return
+    return docs;
+
+}
+
 export async function reviveDiscussion(dbDoc: DbDiscussion): Promise<Discussion> {
     return (await reviveDiscussions([dbDoc]))[0];
 }
