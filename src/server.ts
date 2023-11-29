@@ -10,6 +10,8 @@ import { SSE } from "./sse";
 import { reviveDiscussion, reviveDiscussions } from "./revivers";
 import expressWs from "express-ws";
 import { ChatRoom, ChatRoomManager } from "./chat-room";
+import { discussionsChanges$, notificationsChanges$ } from "./triggers";
+import { filter as rxFilter } from "rxjs";
 
 const port = 3000;
 const app = expressWs(express()).app;  // enable websocket routes
@@ -455,11 +457,11 @@ app.get('/discussions', async (req, res, next) => {  // TODO: secure it
 
         sse.send(docs);
 
-        // TODO: react to the main db watcher and send updates
+        const changesSub = discussionsChanges$.pipe(
+            rxFilter(change => change.payload.users.map(u => u.id).includes(userId)),
+        ).subscribe(change => sse.send(change));
 
-        req.on("close", () => {
-            // TODO: unsub from main db watcher 
-        });
+        req.on("close", () => changesSub.unsubscribe());
 
     } catch(err) { 
         next(err); 
@@ -470,23 +472,22 @@ app.get('/notifications', async (req, res, next) => {  // TODO: secure it
     try {
 
         const userId = "9bdd8262d7f97411c6391278";  // TODO: get userId from req eventually
-        const filter: Filter = {field: "toId", operator: "eq", value: userId };
 
         const sse = new SSE(res);
 
         const docs = await getDocuments<Notification>(
             _getReqPath(req), 
             {field: "date", desc: true},
-            {...filter},  // otherwise can't be reused in watch()
+            {field: "toId", operator: "eq", value: userId },
         );
 
         sse.send(docs);
 
-        // TODO: react to the main db watcher and send updates
+        const changesSub = notificationsChanges$.pipe(
+            rxFilter(change => change.payload?.toId === userId),
+        ).subscribe(change => sse.send(change));
 
-        req.on("close", () => {
-            // TODO: unsub from main db watcher 
-        });
+        req.on("close", () => changesSub.unsubscribe());
 
     } catch(err) { 
         next(err); 
