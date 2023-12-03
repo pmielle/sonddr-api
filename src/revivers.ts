@@ -1,5 +1,5 @@
 import { DbDiscussion, DbMessage, Discussion, Doc, Message, User } from "sonddr-shared";
-import { getDocuments } from "./database";
+import { getDocuments } from "./database.js";
 
 
 export async function reviveMessage(dbDoc: DbMessage): Promise<Message> {

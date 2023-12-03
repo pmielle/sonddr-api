@@ -1,16 +1,16 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
-import { NotFoundError } from "./types";
-import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database";
+import { NotFoundError } from "./types.js";
+import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, Goal, Idea, Message, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
-import { SSE } from "./sse";
-import { reviveDiscussion, reviveDiscussions } from "./revivers";
+import { SSE } from "./sse.js";
+import { reviveDiscussion, reviveDiscussions } from "./revivers.js";
 import expressWs from "express-ws";
-import { ChatRoom, ChatRoomManager } from "./chat-room";
-import { discussionsChanges$, notificationsChanges$ } from "./triggers";
+import { ChatRoom, ChatRoomManager } from "./chat-room.js";
+import { discussionsChanges$, notificationsChanges$ } from "./triggers.js";
 import { filter as rxFilter } from "rxjs";
 
 const port = 3000;

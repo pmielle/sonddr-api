@@ -1,7 +1,7 @@
 import { Change, DbDiscussion, Discussion, Notification } from "sonddr-shared";
-import { watchCollection } from "./database";
+import { watchCollection } from "./database.js";
 import { Subject, switchMap } from "rxjs";
-import { reviveDiscussion } from "./revivers";
+import { reviveDiscussion } from "./revivers.js";
 
 export const notificationsChanges$: Subject<Change<Notification>> = new Subject();
 watchCollection<Notification>("notifications").subscribe(notificationsChanges$);

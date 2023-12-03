@@ -1,5 +1,5 @@
-import { MongoClient, ObjectId, BSON, WithId } from "mongodb";
-import { NotFoundError } from "./types";
+import { MongoClient, ObjectId, BSON } from "mongodb";
+import { NotFoundError } from "./types.js";
 import crypto from "crypto";
 import { Observable } from "rxjs";
 import { Change, Doc } from "sonddr-shared";

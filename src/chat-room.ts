@@ -1,7 +1,7 @@
 import { Subscription } from "rxjs";
-import { getDocuments, watchCollection } from "./database";
-import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
-import { reviveMessage, reviveMessages } from "./revivers";
+import { getDocuments } from "./database.js";
+import { Change, DbMessage, Message } from "sonddr-shared";
+import { reviveMessages } from "./revivers.js";
 import { WebSocket } from "ws";
 
 
