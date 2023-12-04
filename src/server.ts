@@ -3,18 +3,21 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types.js";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, DbMessage, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse.js";
 import { reviveDiscussion, reviveDiscussions } from "./revivers.js";
-import expressWs from "express-ws";
-import { ChatRoom, ChatRoomManager } from "./chat-room.js";
 import { discussionsChanges$, notificationsChanges$ } from "./triggers.js";
 import { filter as rxFilter } from "rxjs";
+import { ChatRoom, ChatRoomManager } from "./chat-room.js";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
 
 const port = 3000;
-const app = expressWs(express()).app;  // enable websocket routes
+const app = express();
+const server = createServer(app);
+const messagesWss = new WebSocketServer({noServer: true});
 app.use(express.json());  // otherwise req.body is undefined
 app.use(cors({origin: "http://0.0.0.0:4200"}));  // otherwise can't be reached by front
 
@@ -161,44 +164,6 @@ app.post('/comments', keycloak.protect(), fetchUserId ,async (req, res, next) =>
             rating: 0,
         };
         const insertedId = await postDocument(_getReqPath(req), payload);
-        res.json({insertedId: insertedId});
-    } catch(err) {
-        next(err);
-    }
-});
-
-app.get('/messages/:id', keycloak.protect(), async (req, res, next) => {
-    try {
-        const dbDoc = await getDocument<DbMessage>(_getReqPath(req));
-        const user = await getDocument<User>(`users/${dbDoc.authorId}`);
-        const {authorId, ...doc} = dbDoc;
-        doc["author"] = user;
-        res.json(doc);
-    } catch(err) {
-        next(err);
-    }
-});
-
-app.post('/messages', keycloak.protect(), fetchUserId ,async (req, res, next) => {
-    try {
-        const payload = {
-            discussionId: _getFromReqBody("discussionId", req),
-            content: _getFromReqBody("content", req),
-            authorId: req["userId"],
-            date: new Date(),
-        };
-        const discussion = await getDocument<DbDiscussion>(`discussions/${payload.discussionId}`);
-        if (! discussion.userIds.includes(payload.authorId)) {
-            throw new Error(`User ${payload.authorId} is not in discussion ${payload.discussionId}`);
-        }
-        const insertedId = await postDocument(_getReqPath(req), payload);
-        await patchDocument(
-            `discussions/${payload.discussionId}`, 
-            [
-                {field: "lastMessageId", operator: "set", value: insertedId},
-                {field: "date", operator: "set", value: payload.date},
-            ]
-        );
         res.json({insertedId: insertedId});
     } catch(err) {
         next(err);
@@ -497,47 +462,90 @@ app.get('/notifications', async (req, res, next) => {  // TODO: secure it
 
 // websockets
 // ----------------------------------------------
+server.on("upgrade", (incomingMessage, duplex, buffer) => {
+	duplex.on("error", (err) => console.error(err));
+	switch(incomingMessage.url) {
+		case "/messages": {
+			messagesWss.handleUpgrade(incomingMessage, duplex, buffer, (ws) => {
+				messagesWss.emit('connection', ws, incomingMessage);
+			});
+			break;
+		}
+		default: {
+			duplex.destroy(new Error(`Unexpected websocket url: ${incomingMessage.url}`));
+			break;
+		}
+	}
+});
+
 const roomManager = new ChatRoomManager();
 
-app.ws('/messages', (ws, req, next) => {
-    try {
+messagesWss.on('connection', (ws, incomingMessage) => {
 
-        const userId = "9bdd8262d7f97411c6391278";
-        const discussionId = _getFromReqQuery<string>("discussionId", req);
+	const userId = "9bdd8262d7f97411c6391278"; // TODO: get this from request eventually
+	const discussionId = "6544c5558fa5c988749c2222"; // TODO: get this from req eventually
 
-        let room: ChatRoom;
-        ws.on("open", () => {
-            room = roomManager.getOrCreateRoom(discussionId, userId, ws);
-            // n.b. no need to send previous messages, ChatRoom does it
-        }); 
-        
-        ws.on("message", (data) => {
-            const payload = {
-                discussionId: discussionId,
-                authorId: userId,
-                date: new Date(),
-                content: data.toString(),
-            };
-            postDocument(`/messages`, payload);
-            // n.b. no need to dispatch anything, ChatRoom reacts to database changes
-        });
+	const room: ChatRoom = roomManager.getOrCreateRoom(discussionId, userId, ws);
+	// n.b. no need to send previous messages, ChatRoom does it
 
-        ws.on("close", () => {
-            room.leave(userId);
-        });
+	ws.on("message", (data) => {
+		const payload = {
+			discussionId: discussionId,
+			authorId: userId,
+			date: new Date(),
+			content: data.toString(),
+		};
+		console.log("POST"); // TODO: actually post
+		// postDocument(`/messages`, payload);
+		// n.b. no need to dispatch anything, ChatRoom reacts to database changes
+	});
 
-    } catch(err) {
-        next(err);
-    }
+	ws.on("close", () => {
+		room.leave(userId);
+	});
 
 });
+
+//
+// app.ws('/messages', (ws, req, next) => { // secure this eventually
+//     try {
+//
+//         const userId = "9bdd8262d7f97411c6391278"; // get this from request eventually
+//         const discussionId = _getFromReqQuery<string>("discussionId", req);
+//
+//         let room: ChatRoom;
+//         ws.on("open", () => {
+//             room = roomManager.getOrCreateRoom(discussionId, userId, ws);
+//             // n.b. no need to send previous messages, ChatRoom does it
+//         }); 
+//         
+//         ws.on("message", (data) => {
+//             const payload = {
+//                 discussionId: discussionId,
+//                 authorId: userId,
+//                 date: new Date(),
+//                 content: data.toString(),
+//             };
+//             postDocument(`/messages`, payload);
+//             // n.b. no need to dispatch anything, ChatRoom reacts to database changes
+//         });
+//
+//         ws.on("close", () => {
+//             room.leave(userId);
+//         });
+//
+//     } catch(err) {
+//         next(err);
+//     }
+//
+// });
 
 
 // error handling
 // ----------------------------------------------
 app.use(_errorHandler);
 
-app.listen(port, '0.0.0.0', () => {
+server.listen(port, '0.0.0.0', () => {
     console.log(`Listening on port ${port}`);
     console.log(`\n`);
 });

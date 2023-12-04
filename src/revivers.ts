@@ -11,7 +11,7 @@ export async function reviveMessages(dbDocs: DbMessage[]): Promise<Message[]> {
     if (dbDocs.length == 0) { return []; }
 
     // get users
-    let usersToGet = _getUniqueInArray(dbDocs, "authorId");
+    let usersToGet = _getUnique(dbDocs, "authorId");
     const users = await getDocuments<User>(
         "users", 
         undefined, 

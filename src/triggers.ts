@@ -1,7 +1,7 @@
-import { Change, DbDiscussion, Discussion, Notification } from "sonddr-shared";
+import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage } from "sonddr-shared";
 import { watchCollection } from "./database.js";
 import { Subject, switchMap } from "rxjs";
-import { reviveDiscussion } from "./revivers.js";
+import { reviveMessage, reviveDiscussion } from "./revivers.js";
 
 export const notificationsChanges$: Subject<Change<Notification>> = new Subject();
 watchCollection<Notification>("notifications").subscribe(notificationsChanges$);
@@ -18,3 +18,16 @@ watchCollection<DbDiscussion>("discussions").pipe(
         return {...change, payload: revivedPayload};
     })
 ).subscribe(discussionsChanges$);
+
+export const messagesChanges$: Subject<Change<Message>> = new Subject(); 
+watchCollection<DbMessage>("messages").pipe(
+    switchMap(async change => {
+        let revivedPayload: Message|undefined;
+        if (change.payload) {
+            revivedPayload = await reviveMessage(change.payload);
+        } else {
+            revivedPayload = undefined;
+        }
+        return {...change, payload: revivedPayload};
+    })
+).subscribe(messagesChanges$);
