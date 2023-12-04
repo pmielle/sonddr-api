@@ -495,8 +495,7 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 			date: new Date(),
 			content: data.toString(),
 		};
-		console.log("POST"); // TODO: actually post
-		// postDocument(`/messages`, payload);
+		postDocument('messages', payload);
 		// n.b. no need to dispatch anything, ChatRoom reacts to database changes
 	});
 
@@ -505,40 +504,6 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 	});
 
 });
-
-//
-// app.ws('/messages', (ws, req, next) => { // secure this eventually
-//     try {
-//
-//         const userId = "9bdd8262d7f97411c6391278"; // get this from request eventually
-//         const discussionId = _getFromReqQuery<string>("discussionId", req);
-//
-//         let room: ChatRoom;
-//         ws.on("open", () => {
-//             room = roomManager.getOrCreateRoom(discussionId, userId, ws);
-//             // n.b. no need to send previous messages, ChatRoom does it
-//         }); 
-//         
-//         ws.on("message", (data) => {
-//             const payload = {
-//                 discussionId: discussionId,
-//                 authorId: userId,
-//                 date: new Date(),
-//                 content: data.toString(),
-//             };
-//             postDocument(`/messages`, payload);
-//             // n.b. no need to dispatch anything, ChatRoom reacts to database changes
-//         });
-//
-//         ws.on("close", () => {
-//             room.leave(userId);
-//         });
-//
-//     } catch(err) {
-//         next(err);
-//     }
-//
-// });
 
 
 // error handling
