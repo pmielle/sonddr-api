@@ -1,6 +1,6 @@
 import { Subscription } from "rxjs";
 import { getDocuments } from "./database.js";
-import { Change, DbMessage, Message } from "sonddr-shared";
+import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
 import { reviveMessages } from "./revivers.js";
 import { WebSocket } from "ws";
 import { messagesChanges$ } from "./triggers.js";
@@ -83,9 +83,12 @@ export class ChatRoom {
 
 	_listenToDatabase() {
 		this.databaseSub = messagesChanges$.subscribe(change => {
-			this.clients.forEach(client => {
-				this._send(change, client);
-			});
+			for (const [userId, ws] of this.clients) {
+				const changeToSend = (change.type === "insert" && change.payload!.author.id === userId)
+					? { ...change, type: "update", docId: placeholder_id } as Change<Message>
+					: change;
+				this._send(changeToSend, ws);
+			}
 		});
 	}
 
