@@ -488,14 +488,21 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 	const room: ChatRoom = roomManager.getOrCreateRoom(discussionId, userId, ws);
 	// n.b. no need to send previous messages, ChatRoom does it
 
-	ws.on("message", (data) => {
-		const payload = {
+	ws.on("message", async (data) => {
+		const newMessagePayload = {
 			discussionId: discussionId,
 			authorId: userId,
 			date: new Date(),
 			content: data.toString(),
 		};
-		postDocument('messages', payload);
+		const newMessageId = await postDocument('messages', newMessagePayload);
+		patchDocument(
+		    `discussions/${discussionId}`, 
+		    [
+			{field: "lastMessageId", operator: "set", value: newMessageId},
+			{field: "date", operator: "set", value: newMessagePayload.date},
+		    ]
+		);
 		// n.b. no need to dispatch anything, ChatRoom reacts to database changes
 	});
 
