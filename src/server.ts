@@ -440,7 +440,7 @@ app.get('/discussions', async (req, res, next) => {
 		sse.send(docs);
 
 		const changesSub = discussionsChanges$.pipe(
-			rxFilter(change => change.payload.users.map(u => u.id).includes(userId)),
+			rxFilter(change => change.payload?.users.map(u => u.id).includes(userId)),
 		).subscribe(change => sse.send(change));
 
 		req.on("close", () => changesSub.unsubscribe());

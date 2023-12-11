@@ -1,4 +1,4 @@
-import { Subscription } from "rxjs";
+import { Subscription, filter as rxFilter } from "rxjs";
 import { getDocuments } from "./database.js";
 import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
 import { reviveMessages } from "./revivers.js";
@@ -76,13 +76,19 @@ export class ChatRoom {
 	}
 
 	async _getOldMessages(): Promise<Message[]> {
-		const dbDocs = await getDocuments<DbMessage>("messages", {field: "date", desc: true});
+		const dbDocs = await getDocuments<DbMessage>(
+			"messages",
+			{field: "date", desc: true},
+			{field: "discussionId", operator: "eq", value: this.discussionId},
+		);
 		const docs = await reviveMessages(dbDocs);
 		return docs;
 	}
 
 	_listenToDatabase() {
-		this.databaseSub = messagesChanges$.subscribe(change => {
+		this.databaseSub = messagesChanges$.pipe(
+			rxFilter(change => change.payload?.discussionId === this.discussionId)
+		).subscribe(change => {
 			for (const [userId, ws] of this.clients) {
 				const changeToSend = (change.type === "insert" && change.payload!.author.id === userId)
 					? { ...change, type: "update", docId: placeholder_id } as Change<Message>
