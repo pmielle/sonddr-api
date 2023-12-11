@@ -13,13 +13,23 @@ import { filter as rxFilter } from "rxjs";
 import { ChatRoom, ChatRoomManager } from "./chat-room.js";
 import { createServer, IncomingMessage } from "http";
 import { WebSocketServer } from "ws";
+import multer from "multer";
 
+const b_in_mb = 1048576;
 const port = 3000;
 const app = express();
 const server = createServer(app);
 const messagesWss = new WebSocketServer({ noServer: true });
 app.use(express.json());  // otherwise req.body is undefined
 app.use(cors({ origin: "http://0.0.0.0:4200" }));  // otherwise can't be reached by front
+
+// file upload
+// --------------------------------------------
+const upload = multer({dest: "uploads/", limits: {
+	files: 20,
+	fileSize: 50 * b_in_mb,
+} });
+
 
 // authentication
 // ----------------------------------------------
@@ -232,19 +242,25 @@ app.get('/users', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.post('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
+app.post('/ideas', keycloak.protect(), fetchUserId, upload.single('cover'), async (req, res, next) => {
 	try {
+
 		const payload = {
 			title: _getFromReqBody("title", req),
 			authorId: req["userId"],
-			goalIds: _getFromReqBody("goalIds", req),
+			goalIds: JSON.parse(_getFromReqBody("goalIds", req)),
 			content: _getFromReqBody("content", req),
 			externalLinks: [],
 			date: new Date(),
 			supports: 0,
+			cover: req.file ? req.file.path : undefined,
 		};
-		const insertedId = await postDocument(_getReqPath(req), payload);
-		res.json({ insertedId: insertedId });
+
+		console.log(payload); // TODO: continue here
+
+		// const insertedId = await postDocument(_getReqPath(req), payload);
+		// res.json({ insertedId: insertedId });
+
 	} catch (err) {
 		next(err);
 	}
