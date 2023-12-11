@@ -11,470 +11,492 @@ import { reviveDiscussion, reviveDiscussions } from "./revivers.js";
 import { discussionsChanges$, notificationsChanges$ } from "./triggers.js";
 import { filter as rxFilter } from "rxjs";
 import { ChatRoom, ChatRoomManager } from "./chat-room.js";
-import { createServer } from "http";
+import { createServer, IncomingMessage } from "http";
 import { WebSocketServer } from "ws";
 
 const port = 3000;
 const app = express();
 const server = createServer(app);
-const messagesWss = new WebSocketServer({noServer: true});
+const messagesWss = new WebSocketServer({ noServer: true });
 app.use(express.json());  // otherwise req.body is undefined
-app.use(cors({origin: "http://0.0.0.0:4200"}));  // otherwise can't be reached by front
+app.use(cors({ origin: "http://0.0.0.0:4200" }));  // otherwise can't be reached by front
 
 // authentication
 // ----------------------------------------------
 const memoryStore = new session.MemoryStore();
-app.use(session({secret: 'some secret', saveUninitialized: true, resave: false, store: memoryStore}));
-const keycloak = new KeycloakConnect({store: memoryStore});  // reads keycloak.json
+app.use(session({ secret: 'some secret', saveUninitialized: true, resave: false, store: memoryStore }));
+const keycloak = new KeycloakConnect({ store: memoryStore });  // reads keycloak.json
 app.use(keycloak.middleware());
 
 async function fetchUserId(req: Request, res: Response, next: NextFunction) {
-    const token = (await keycloak.getGrant(req, res)).access_token;
-    const profile = await keycloak.grantManager.userInfo(token);
-    req["userId"] = makeMongoId(profile["sub"]).toString();
-    next();
+	const token = (await keycloak.getGrant(req, res)).access_token;
+	const profile = await keycloak.grantManager.userInfo(token);
+	req["userId"] = makeMongoId(profile["sub"]).toString();
+	next();
 }
+
+async function authenticateIncomingMessage(incomingMessage: IncomingMessage): Promise<void> {
+	const url = new URL(incomingMessage.url, `http://${incomingMessage.headers.host}`);
+	const token = url.searchParams.get("token");
+	let profile = await keycloak.grantManager.userInfo(token);
+	incomingMessage["userId"] = makeMongoId(profile["sub"]).toString();
+}
+
+async function authenticateRequest(req: Request): Promise<void> {
+	const url = new URL(req.url, `http://${req.headers.host}`);
+	const token = url.searchParams.get("token");
+	let profile = await keycloak.grantManager.userInfo(token);
+	req["userId"] = makeMongoId(profile["sub"]).toString();
+}
+
 
 // routes
 // ----------------------------------------------
 app.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const doc = await getDocument<Vote>(_getReqPath(req));
-        if (doc.authorId !== req["userId"]) {
-            throw new Error(`${req["userId"]} is not the author of the vote`);
-        }
-        // get previous value and patch the rating of the comment
-        const previousValue = await getDocument<Vote>(_getReqPath(req))
-            .then(v => v.value)
-            .catch(err => {
-                if (! (err instanceof NotFoundError)) { throw err; }
-                return 0;
-            });
-        await patchDocument(`comments/${doc.commentId}`, {field: "rating", operator: "inc", value: -1 * previousValue});
-        // delete the vote
-        await deleteDocument(_getReqPath(req));
-        res.send();
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const doc = await getDocument<Vote>(_getReqPath(req));
+		if (doc.authorId !== req["userId"]) {
+			throw new Error(`${req["userId"]} is not the author of the vote`);
+		}
+		// get previous value and patch the rating of the comment
+		const previousValue = await getDocument<Vote>(_getReqPath(req))
+			.then(v => v.value)
+			.catch(err => {
+				if (!(err instanceof NotFoundError)) { throw err; }
+				return 0;
+			});
+		await patchDocument(`comments/${doc.commentId}`, { field: "rating", operator: "inc", value: -1 * previousValue });
+		// delete the vote
+		await deleteDocument(_getReqPath(req));
+		res.send();
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const value = _getFromReqBody<number>("value", req);
-        if (! [1, -1].includes(value)) { throw new Error(`Value must be 1 or -1`); }
-        const commentId = _getFromReqBody<string>("commentId", req);
-        const userId = req["userId"];
-        const voteId = makeVoteId(commentId, userId);
-        // get previous vote value to determine the new comment rating
-        const previousValue = await getDocument<Vote>(_getReqPath(req))
-            .then(v => v.value)
-            .catch(err => {
-                if (! (err instanceof NotFoundError)) { throw err; }
-                return 0;
-            });
-        const valueDiff = value - previousValue;
-        if (valueDiff !== 0) {
-            await patchDocument(
-                `comments/${commentId}`, 
-                {field: "rating", operator: "inc", value: valueDiff},
-            );
-        }
-        // put the vote, allow upsert
-        await putDocument(_getReqPath(req), {
-            id: voteId,
-            authorId: userId,
-            commentId: commentId,
-            value: value,
-        }, true);
-        res.send();
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const value = _getFromReqBody<number>("value", req);
+		if (![1, -1].includes(value)) { throw new Error(`Value must be 1 or -1`); }
+		const commentId = _getFromReqBody<string>("commentId", req);
+		const userId = req["userId"];
+		const voteId = makeVoteId(commentId, userId);
+		// get previous vote value to determine the new comment rating
+		const previousValue = await getDocument<Vote>(_getReqPath(req))
+			.then(v => v.value)
+			.catch(err => {
+				if (!(err instanceof NotFoundError)) { throw err; }
+				return 0;
+			});
+		const valueDiff = value - previousValue;
+		if (valueDiff !== 0) {
+			await patchDocument(
+				`comments/${commentId}`,
+				{ field: "rating", operator: "inc", value: valueDiff },
+			);
+		}
+		// put the vote, allow upsert
+		await putDocument(_getReqPath(req), {
+			id: voteId,
+			authorId: userId,
+			commentId: commentId,
+			value: value,
+		}, true);
+		res.send();
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const doc = await getDocument<Cheer>(_getReqPath(req));
-        if (doc.authorId !== req["userId"]) {
-            throw new Error(`${req["userId"]} is not the author of the cheer`);
-        }
-        await patchDocument(`ideas/${doc.ideaId}`, {field: "supports", operator: "inc", value: -1});
-        await deleteDocument(_getReqPath(req));
-        res.send();
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const doc = await getDocument<Cheer>(_getReqPath(req));
+		if (doc.authorId !== req["userId"]) {
+			throw new Error(`${req["userId"]} is not the author of the cheer`);
+		}
+		await patchDocument(`ideas/${doc.ideaId}`, { field: "supports", operator: "inc", value: -1 });
+		await deleteDocument(_getReqPath(req));
+		res.send();
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/cheers/:id', keycloak.protect(), async (req, res, next) => {
-    try {
-        const doc = await getDocument<Cheer>(_getReqPath(req));
-        res.json(doc);
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const doc = await getDocument<Cheer>(_getReqPath(req));
+		res.json(doc);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const ideaId = _getFromReqBody("ideaId", req);
-        const userId = req["userId"];
-        const id = makeCheerId(ideaId as string, userId);        
-        const payload = {
-            id: id,
-            ideaId: ideaId,
-            authorId: userId,
-        };
-        await putDocument(_getReqPath(req), payload);
-        await patchDocument(`ideas/${ideaId}`, {field: "supports", operator: "inc", value: 1});
-        res.send();
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const ideaId = _getFromReqBody("ideaId", req);
+		const userId = req["userId"];
+		const id = makeCheerId(ideaId as string, userId);
+		const payload = {
+			id: id,
+			ideaId: ideaId,
+			authorId: userId,
+		};
+		await putDocument(_getReqPath(req), payload);
+		await patchDocument(`ideas/${ideaId}`, { field: "supports", operator: "inc", value: 1 });
+		res.send();
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const dbDoc = await getDocument<DbComment>(_getReqPath(req));
-        const user = await getDocument<User>(`users/${dbDoc.authorId}`);
-        const {authorId, ...doc} = dbDoc;
-        doc["author"] = user;
+	try {
+		const dbDoc = await getDocument<DbComment>(_getReqPath(req));
+		const user = await getDocument<User>(`users/${dbDoc.authorId}`);
+		const { authorId, ...doc } = dbDoc;
+		doc["author"] = user;
 
-        // check if the user has voted
-        try {
-            const voteId = makeVoteId(dbDoc.id, req["userId"]);
-            const vote = await getDocument<Vote>(`votes/${voteId}`);
-            doc["userVote"] = vote.value;
-        } catch(err) { if (! (err instanceof NotFoundError)) { throw err; } }
+		// check if the user has voted
+		try {
+			const voteId = makeVoteId(dbDoc.id, req["userId"]);
+			const vote = await getDocument<Vote>(`votes/${voteId}`);
+			doc["userVote"] = vote.value;
+		} catch (err) { if (!(err instanceof NotFoundError)) { throw err; } }
 
-        res.json(doc);
-    } catch(err) {
-        next(err);
-    }
+		res.json(doc);
+	} catch (err) {
+		next(err);
+	}
 });
 
-app.post('/comments', keycloak.protect(), fetchUserId ,async (req, res, next) => {
-    try {
-        const payload = {
-            ideaId: _getFromReqBody("ideaId", req),
-            content: _getFromReqBody("content", req),
-            authorId: req["userId"],
-            date: new Date(),
-            rating: 0,
-        };
-        const insertedId = await postDocument(_getReqPath(req), payload);
-        res.json({insertedId: insertedId});
-    } catch(err) {
-        next(err);
-    }
+app.post('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		const payload = {
+			ideaId: _getFromReqBody("ideaId", req),
+			content: _getFromReqBody("content", req),
+			authorId: req["userId"],
+			date: new Date(),
+			rating: 0,
+		};
+		const insertedId = await postDocument(_getReqPath(req), payload);
+		res.json({ insertedId: insertedId });
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const fromUserId = req["userId"];
-        const toUserId = _getFromReqBody("toUserId", req);
-        const firstMessageContent = _getFromReqBody("firstMessageContent", req);
-        const discussionPayload = {
-            userIds: [fromUserId, toUserId],
-        };
-        const discussionId = await postDocument(_getReqPath(req), discussionPayload);
-        const firstMessagePayload = {
-            discussionId: discussionId,
-            authorId: fromUserId,
-            content: firstMessageContent,
-            date: new Date(),
-        };
-        const firstMessageId = await postDocument('messages', firstMessagePayload);
-        await patchDocument(
-            `discussions/${discussionId}`, 
-            [
-                {field: "lastMessageId", operator: "set", value: firstMessageId},
-                {field: "date", operator: "set", value: firstMessagePayload.date},
-            ]
-        );
-        res.json({insertedId: discussionId});
-    } catch(err) {
-        next(err);
-    };
+	try {
+		const fromUserId = req["userId"];
+		const toUserId = _getFromReqBody("toUserId", req);
+		const firstMessageContent = _getFromReqBody("firstMessageContent", req);
+		const discussionPayload = {
+			userIds: [fromUserId, toUserId],
+		};
+		const discussionId = await postDocument(_getReqPath(req), discussionPayload);
+		const firstMessagePayload = {
+			discussionId: discussionId,
+			authorId: fromUserId,
+			content: firstMessageContent,
+			date: new Date(),
+		};
+		const firstMessageId = await postDocument('messages', firstMessagePayload);
+		await patchDocument(
+			`discussions/${discussionId}`,
+			[
+				{ field: "lastMessageId", operator: "set", value: firstMessageId },
+				{ field: "date", operator: "set", value: firstMessagePayload.date },
+			]
+		);
+		res.json({ insertedId: discussionId });
+	} catch (err) {
+		next(err);
+	};
 });
 
 app.get('/users', keycloak.protect(), async (req, res, next) => {
-    try {
-        const regex = req.query.regex;
-        const filters: Filter[] = [];        
-        if (regex) {
-            filters.push({field: "name", operator: "regex", value: regex});
-        }
-        const users = await getDocuments<User>(
-            _getReqPath(req), 
-            {field: 'name', desc: false},
-            filters
-        );
-        res.json(users);
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const regex = req.query.regex;
+		const filters: Filter[] = [];
+		if (regex) {
+			filters.push({ field: "name", operator: "regex", value: regex });
+		}
+		const users = await getDocuments<User>(
+			_getReqPath(req),
+			{ field: 'name', desc: false },
+			filters
+		);
+		res.json(users);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.post('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const payload = {
-            title: _getFromReqBody("title", req),
-            authorId: req["userId"],
-            goalIds: _getFromReqBody("goalIds", req),
-            content: _getFromReqBody("content", req),
-            externalLinks: [],
-            date: new Date(),
-            supports: 0,
-        };
-        const insertedId = await postDocument(_getReqPath(req), payload);
-        res.json({insertedId: insertedId});
-    } catch(err) {
-        next(err);
-    }
+	try {
+		const payload = {
+			title: _getFromReqBody("title", req),
+			authorId: req["userId"],
+			goalIds: _getFromReqBody("goalIds", req),
+			content: _getFromReqBody("content", req),
+			externalLinks: [],
+			date: new Date(),
+			supports: 0,
+		};
+		const insertedId = await postDocument(_getReqPath(req), payload);
+		res.json({ insertedId: insertedId });
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.put('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const payload = {
-            id: req["userId"],
-            name: _getFromReqBody("name", req),
-            date: new Date(),
-            bio: null,
-        };
-        await putDocument(_getReqPath(req), payload);
-        res.send();
-    } catch(err) {
-        next(err);
-    };
+	try {
+		const payload = {
+			id: req["userId"],
+			name: _getFromReqBody("name", req),
+			date: new Date(),
+			bio: null,
+		};
+		await putDocument(_getReqPath(req), payload);
+		res.send();
+	} catch (err) {
+		next(err);
+	};
 });
 
 app.get('/goals', keycloak.protect(), async (req, res, next) => {
-    try {
-        const docs = await getDocuments<Goal>(_getReqPath(req), {field: "order", desc: false});
-        res.json(docs);
-    } catch(err) { 
-        next(err); 
-    }
+	try {
+		const docs = await getDocuments<Goal>(_getReqPath(req), { field: "order", desc: false });
+		res.json(docs);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
-    try {
-        const doc = await getDocument<Goal>(_getReqPath(req));
-        res.json(doc);
-    } catch(err) { 
-        next(err); 
-    }
+	try {
+		const doc = await getDocument<Goal>(_getReqPath(req));
+		res.json(doc);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/users/:id', keycloak.protect(), async (req, res, next) => {
-    try {
-        const doc = await getDocument<User>(_getReqPath(req));
-        res.json(doc);
-    } catch(err) { 
-        next(err); 
-    }
+	try {
+		const doc = await getDocument<User>(_getReqPath(req));
+		res.json(doc);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
-        const cheerId = makeCheerId(dbDoc.id, req["userId"]);
-        const [author, goals, userHasCheered] = await Promise.all([
-            getDocument<User>(`users/${dbDoc.authorId}`),
-            getDocuments<Goal>("goals", undefined, {field: "id", operator: "in", value: dbDoc.goalIds}),
-            getDocument<Cheer>(`cheers/${cheerId}`)
-                .then(() => true)
-                .catch<boolean>(err => {
-                    if (! (err instanceof NotFoundError)) { throw err; }
-                    return false;
-                }),
-        ]);
-        const {authorId, goalIds, ...data} = dbDoc;
-        data["author"] = author;
-        data["goals"] = goals;
-        data["userHasCheered"] = userHasCheered;
-        res.json(data);
-    } catch(err) { 
-        next(err); 
-    }
+	try {
+		const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
+		const cheerId = makeCheerId(dbDoc.id, req["userId"]);
+		const [author, goals, userHasCheered] = await Promise.all([
+			getDocument<User>(`users/${dbDoc.authorId}`),
+			getDocuments<Goal>("goals", undefined, { field: "id", operator: "in", value: dbDoc.goalIds }),
+			getDocument<Cheer>(`cheers/${cheerId}`)
+				.then(() => true)
+				.catch<boolean>(err => {
+					if (!(err instanceof NotFoundError)) { throw err; }
+					return false;
+				}),
+		]);
+		const { authorId, goalIds, ...data } = dbDoc;
+		data["author"] = author;
+		data["goals"] = goals;
+		data["userHasCheered"] = userHasCheered;
+		res.json(data);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const order = req.query.order || "date";
-        const goalId = req.query.goalId;
-        const authorId = req.query.authorId;
-        const regex = req.query.regex;
-        const filters: Filter[] = [];    
-        if (goalId) {
-            filters.push({field: "goalIds", operator: "in", value: [goalId]});
-        }    
-        if (authorId) {
-            filters.push({field: "authorId", operator: "eq", value: authorId});
-        }
-        if (regex) {
-            filters.push({field: "title", operator: "regex", value: regex});
-        }
-        const dbDocs = await getDocuments<DbIdea>(
-            _getReqPath(req), 
-            {field: order as string, desc: true}, 
-            filters
-        );
-        if (dbDocs.length == 0) { 
-            res.json([]); 
-            return; 
-        }
-        const authorsToGet = _getUnique(dbDocs, "authorId");
-        const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
-        const cheersToGet = _getUnique(dbDocs, "id");
-        const [authors, goals, cheers] = await Promise.all([
-            getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet}),
-            getDocuments<Goal>("goals", undefined, {field: "id", operator: "in", value: goalsToGet}),
-            getDocuments<Cheer>("cheers", undefined, [
-                    {field: "ideaId", operator: "in", value: cheersToGet},
-                    {field: "authorId", operator: "eq", value: req["userId"]},
-                ]),
-        ]);
+	try {
+		const order = req.query.order || "date";
+		const goalId = req.query.goalId;
+		const authorId = req.query.authorId;
+		const regex = req.query.regex;
+		const filters: Filter[] = [];
+		if (goalId) {
+			filters.push({ field: "goalIds", operator: "in", value: [goalId] });
+		}
+		if (authorId) {
+			filters.push({ field: "authorId", operator: "eq", value: authorId });
+		}
+		if (regex) {
+			filters.push({ field: "title", operator: "regex", value: regex });
+		}
+		const dbDocs = await getDocuments<DbIdea>(
+			_getReqPath(req),
+			{ field: order as string, desc: true },
+			filters
+		);
+		if (dbDocs.length == 0) {
+			res.json([]);
+			return;
+		}
+		const authorsToGet = _getUnique(dbDocs, "authorId");
+		const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
+		const cheersToGet = _getUnique(dbDocs, "id");
+		const [authors, goals, cheers] = await Promise.all([
+			getDocuments<User>("users", undefined, { field: "id", operator: "in", value: authorsToGet }),
+			getDocuments<Goal>("goals", undefined, { field: "id", operator: "in", value: goalsToGet }),
+			getDocuments<Cheer>("cheers", undefined, [
+				{ field: "ideaId", operator: "in", value: cheersToGet },
+				{ field: "authorId", operator: "eq", value: req["userId"] },
+			]),
+		]);
 
-        const docs: Idea[] = dbDocs.map((dbDoc) => {
-            const {authorId, goalIds, ...data} = dbDoc;
-            data["author"] = authors.find(u => u.id === authorId);
-            data["goals"] = goals.filter(g => goalIds.includes(g.id));
-            data["userHasCheered"] = cheers.find(c => c.ideaId === dbDoc.id) ? true : false;
-            return data as any // typescript?? 
-        });
-        res.json(docs);
-    } catch(err) { 
-        next(err); 
-    }
+		const docs: Idea[] = dbDocs.map((dbDoc) => {
+			const { authorId, goalIds, ...data } = dbDoc;
+			data["author"] = authors.find(u => u.id === authorId);
+			data["goals"] = goals.filter(g => goalIds.includes(g.id));
+			data["userHasCheered"] = cheers.find(c => c.ideaId === dbDoc.id) ? true : false;
+			return data as any // typescript?? 
+		});
+		res.json(docs);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
-    try {
-        const order = req.query.order || "date";
-        const ideaId = req.query.ideaId;
-        const authorId = req.query.authorId;
-        const filters: Filter[] = [];    
-        if (ideaId) {
-            filters.push({field: "ideaId", operator: "eq", value: ideaId});
-        }    
-        if (authorId) {
-            filters.push({field: "authorId", operator: "eq", value: authorId});
-        }
-        const dbDocs = await getDocuments<DbComment>(
-            _getReqPath(req), 
-            {field: order as string, desc: true}, 
-            filters
-        );
-        if (dbDocs.length == 0) { 
-            res.json([]); 
-            return; 
-        }
-        const authorsToGet = _getUnique(dbDocs, "authorId");
-        const votesToGet = _getUnique(dbDocs, "id");
-        const [authors, votes] = await Promise.all([
-            getDocuments<User>("users", undefined, {field: "id", operator: "in", value: authorsToGet}),
-            getDocuments<Vote>("votes", undefined, [
-                {field: "commentId", operator: "in", value: votesToGet},
-                {field: "authorId", operator: "eq", value: req["userId"]},
-            ]),
-        ]);
-        
-        const docs: Comment[] = dbDocs.map((dbDoc) => {
-            const {authorId, ...data} = dbDoc;
-            data["author"] = authors.find(u => u.id === authorId);
-            const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
-            data["userVote"] = vote ? vote.value : undefined;
-            return data as any // typescript?? 
-        });
-        res.json(docs);
-    } catch(err) { 
-        next(err); 
-    }
+	try {
+		const order = req.query.order || "date";
+		const ideaId = req.query.ideaId;
+		const authorId = req.query.authorId;
+		const filters: Filter[] = [];
+		if (ideaId) {
+			filters.push({ field: "ideaId", operator: "eq", value: ideaId });
+		}
+		if (authorId) {
+			filters.push({ field: "authorId", operator: "eq", value: authorId });
+		}
+		const dbDocs = await getDocuments<DbComment>(
+			_getReqPath(req),
+			{ field: order as string, desc: true },
+			filters
+		);
+		if (dbDocs.length == 0) {
+			res.json([]);
+			return;
+		}
+		const authorsToGet = _getUnique(dbDocs, "authorId");
+		const votesToGet = _getUnique(dbDocs, "id");
+		const [authors, votes] = await Promise.all([
+			getDocuments<User>("users", undefined, { field: "id", operator: "in", value: authorsToGet }),
+			getDocuments<Vote>("votes", undefined, [
+				{ field: "commentId", operator: "in", value: votesToGet },
+				{ field: "authorId", operator: "eq", value: req["userId"] },
+			]),
+		]);
+
+		const docs: Comment[] = dbDocs.map((dbDoc) => {
+			const { authorId, ...data } = dbDoc;
+			data["author"] = authors.find(u => u.id === authorId);
+			const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
+			data["userVote"] = vote ? vote.value : undefined;
+			return data as any // typescript?? 
+		});
+		res.json(docs);
+	} catch (err) {
+		next(err);
+	}
 });
 
 app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
-    try {
-        const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
-        const doc = await reviveDiscussion(dbDoc);
-        res.json(doc);
-    } catch(err) { 
-        next(err); 
-    }
+	try {
+		const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
+		const doc = await reviveDiscussion(dbDoc);
+		res.json(doc);
+	} catch (err) {
+		next(err);
+	}
 });
 
-app.get('/discussions', async (req, res, next) => {  // TODO: secure it
-    try {
+app.get('/discussions', async (req, res, next) => {
+	try {
 
-        const userId = "9bdd8262d7f97411c6391278";  // TODO: get userId from req eventually
-        const filter: Filter = {field: "userIds", operator: "in", value: [userId] };
+		await authenticateRequest(req);
+		const userId = req["userId"];
 
-        const sse = new SSE(res);
+		const filter: Filter = { field: "userIds", operator: "in", value: [userId] };
 
-        const dbDocs = await getDocuments<DbDiscussion>(
-            _getReqPath(req), 
-            {field: "date", desc: true},
-            {...filter},  // otherwise can't be reused in watch()
-        );
-        const docs = await reviveDiscussions(dbDocs);
+		const sse = new SSE(res);
 
-        sse.send(docs);
+		const dbDocs = await getDocuments<DbDiscussion>(
+			_getReqPath(req),
+			{ field: "date", desc: true },
+			{ ...filter },  // otherwise can't be reused in watch()
+		);
+		const docs = await reviveDiscussions(dbDocs);
 
-        const changesSub = discussionsChanges$.pipe(
-            rxFilter(change => change.payload.users.map(u => u.id).includes(userId)),
-        ).subscribe(change => sse.send(change));
+		sse.send(docs);
 
-        req.on("close", () => changesSub.unsubscribe());
+		const changesSub = discussionsChanges$.pipe(
+			rxFilter(change => change.payload.users.map(u => u.id).includes(userId)),
+		).subscribe(change => sse.send(change));
 
-    } catch(err) { 
-        next(err); 
-    }
+		req.on("close", () => changesSub.unsubscribe());
+
+	} catch (err) {
+		next(err);
+	}
 });
 
-app.get('/notifications', async (req, res, next) => {  // TODO: secure it
-    try {
+app.get('/notifications', async (req, res, next) => {
+	try {
 
-        const userId = "9bdd8262d7f97411c6391278";  // TODO: get userId from req eventually
+		await authenticateRequest(req);
+		const userId = req["userId"];
 
-        const sse = new SSE(res);
+		const sse = new SSE(res);
 
-        const docs = await getDocuments<Notification>(
-            _getReqPath(req), 
-            {field: "date", desc: true},
-            {field: "toId", operator: "eq", value: userId },
-        );
+		const docs = await getDocuments<Notification>(
+			_getReqPath(req),
+			{ field: "date", desc: true },
+			{ field: "toId", operator: "eq", value: userId },
+		);
 
-        sse.send(docs);
+		sse.send(docs);
 
-        const changesSub = notificationsChanges$.pipe(
-            rxFilter(change => change.payload?.toId === userId),
-        ).subscribe(change => sse.send(change));
+		const changesSub = notificationsChanges$.pipe(
+			rxFilter(change => change.payload?.toId === userId),
+		).subscribe(change => sse.send(change));
 
-        req.on("close", () => changesSub.unsubscribe());
+		req.on("close", () => changesSub.unsubscribe());
 
-    } catch(err) { 
-        next(err); 
-    }
+	} catch (err) {
+		next(err);
+	}
 });
 
 
 // websockets
 // ----------------------------------------------
-server.on("upgrade", (incomingMessage, duplex, buffer) => {
+server.on("upgrade", async (incomingMessage, duplex, buffer) => {
 	duplex.on("error", (err) => console.error(err));
-	switch(incomingMessage.url) {
-		case "/messages": {
+
+	try {
+
+		await authenticateIncomingMessage(incomingMessage);
+
+		if (incomingMessage.url!.startsWith("/messages")) {
 			messagesWss.handleUpgrade(incomingMessage, duplex, buffer, (ws) => {
 				messagesWss.emit('connection', ws, incomingMessage);
 			});
-			break;
+		} else {
+			throw new Error(`Unexpected websocket url: ${incomingMessage.url}`);
 		}
-		default: {
-			duplex.destroy(new Error(`Unexpected websocket url: ${incomingMessage.url}`));
-			break;
-		}
+
+	} catch (err) {
+		duplex.destroy(err);
 	}
 });
 
@@ -482,9 +504,9 @@ const roomManager = new ChatRoomManager();
 
 messagesWss.on('connection', (ws, incomingMessage) => {
 
-	const userId = "9bdd8262d7f97411c6391278"; // TODO: get this from request eventually
-	const discussionId = "6544c5558fa5c988749c2222"; // TODO: get this from req eventually
-
+	const userId = incomingMessage["userId"];
+	const discussionId = _getFromIncomingMessageQuery<string>("discussionId", incomingMessage);
+	
 	const room: ChatRoom = roomManager.getOrCreateRoom(discussionId, userId, ws);
 	// n.b. no need to send previous messages, ChatRoom does it
 
@@ -497,11 +519,11 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 		};
 		const newMessageId = await postDocument('messages', newMessagePayload);
 		patchDocument(
-		    `discussions/${discussionId}`, 
-		    [
-			{field: "lastMessageId", operator: "set", value: newMessageId},
-			{field: "date", operator: "set", value: newMessagePayload.date},
-		    ]
+			`discussions/${discussionId}`,
+			[
+				{ field: "lastMessageId", operator: "set", value: newMessageId },
+				{ field: "date", operator: "set", value: newMessagePayload.date },
+			]
 		);
 		// n.b. no need to dispatch anything, ChatRoom reacts to database changes
 	});
@@ -518,66 +540,73 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 app.use(_errorHandler);
 
 server.listen(port, '0.0.0.0', () => {
-    console.log(`Listening on port ${port}`);
-    console.log(`\n`);
+	console.log(`Listening on port ${port}`);
+	console.log(`\n`);
 });
 
 
 // private
 // ----------------------------------------------
 function _getReqPath(req: Request): string {
-    let path = req.path;
-    if (path.charAt(0) == "/") { 
-        path = path.substring(1); 
-    }
-    return path;
+	let path = req.path;
+	if (path.charAt(0) == "/") {
+		path = path.substring(1);
+	}
+	return path;
 }
 
 function _getFromReqBody<T>(key: string, req: Request): T {
-    const value = req.body[key];
-    if (value === undefined) { throw new Error(`${key} not found in request body`); }
-    return value;
+	const value = req.body[key];
+	if (value === undefined) { throw new Error(`${key} not found in request body`); }
+	return value;
 }
 
 function _getFromReqQuery<T>(key: string, req: Request): T {
-    const value = req.query[key];
-    if (value === undefined) { throw new Error(`${key} not found in request query parameters`); }
-    return value as T;
+	const value = req.query[key];
+	if (value === undefined) { throw new Error(`${key} not found in request query parameters`); }
+	return value as T;
+}
+
+function _getFromIncomingMessageQuery<T>(key: string, incomingMessage: IncomingMessage): T {
+	const url = new URL(incomingMessage.url, `http://${incomingMessage.headers.host}`);
+	const value = url.searchParams.get(key);
+	if (! value) { throw new Error(`${key} not found in request query parameters`); }
+	return value as T;
 }
 
 function _errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
-    console.error(chalk.red(`⚠️ ⚠️ ⚠️ ERROR AT ${new Date()}`));
-    console.error(`------------------------------`);
-    console.error(`REQUEST DETAILS`);
-    console.error(`------------------------------`);
-    console.error(`method : ${req.method}`);
-    console.error(`url    : ${req.originalUrl}`);
-    console.error(`body   : ${JSON.stringify(req.body)}`);
-    console.error(chalk.gray(`headers: ${JSON.stringify(req.headers)}`));
-    console.error(`------------------------------`);
-    console.error(`ERROR MESSAGE`);
-    console.error(`------------------------------`);
-    console.error(err);
-    console.error(`\n\n`);
-    if (err instanceof NotFoundError) {
-        res.status(404).send();
-    } else {
-        res.status(500).send();
-    }
+	console.error(chalk.red(`⚠️ ⚠️ ⚠️ ERROR AT ${new Date()}`));
+	console.error(`------------------------------`);
+	console.error(`REQUEST DETAILS`);
+	console.error(`------------------------------`);
+	console.error(`method : ${req.method}`);
+	console.error(`url    : ${req.originalUrl}`);
+	console.error(`body   : ${JSON.stringify(req.body)}`);
+	console.error(chalk.gray(`headers: ${JSON.stringify(req.headers)}`));
+	console.error(`------------------------------`);
+	console.error(`ERROR MESSAGE`);
+	console.error(`------------------------------`);
+	console.error(err);
+	console.error(`\n\n`);
+	if (err instanceof NotFoundError) {
+		res.status(404).send();
+	} else {
+		res.status(500).send();
+	}
 }
 
 function _getUnique<T, U extends keyof T>(collection: T[], key: U): T[U][] {
-    return Array.from(collection.reduce((result, current) => {
-        result.add(current[key] as T[U]);
-        return result;
-    }, new Set<T[U]>).values());
+	return Array.from(collection.reduce((result, current) => {
+		result.add(current[key] as T[U]);
+		return result;
+	}, new Set<T[U]>).values());
 }
 
 function _getUniqueInArray<T, U extends keyof T>(collection: T[], key: U): T[U] {
-    return Array.from(collection.reduce((result, current) => {
-        (current[key] as any).forEach((item: any) => {
-            result.add(item);
-        });
-        return result;
-    }, new Set<any>).values()) as T[U];
+	return Array.from(collection.reduce((result, current) => {
+		(current[key] as any).forEach((item: any) => {
+			result.add(item);
+		});
+		return result;
+	}, new Set<any>).values()) as T[U];
 }
