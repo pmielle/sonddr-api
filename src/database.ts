@@ -32,6 +32,7 @@ export function watchCollection<T>(path: string, filter?: Filter|Filter[]): Obse
         : {};
     const pipeline = [{'$match': filterObj}];
     // watch changes
+    // fullDocumentBeforeChanges is only available for mongodb v6
     const changes = db.collection(path).watch(pipeline, {fullDocument: "updateLookup"});
     return new Observable((subscriber) => {
         changes.on("change", (change) => {
