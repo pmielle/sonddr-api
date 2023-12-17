@@ -25,11 +25,11 @@ app.use(cors({ origin: "http://0.0.0.0:4200" }));  // otherwise can't be reached
 
 // file upload
 // --------------------------------------------
-const upload = multer({dest: "uploads/", limits: {
+const multerPath = "uploads";
+const upload = multer({dest: multerPath, limits: {
 	files: 20,
 	fileSize: 50 * b_in_mb,
 } });
-
 
 // authentication
 // ----------------------------------------------
@@ -62,6 +62,8 @@ async function authenticateRequest(req: Request): Promise<void> {
 
 // routes
 // ----------------------------------------------
+app.use("/uploads", express.static(multerPath));
+
 app.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const doc = await getDocument<Vote>(_getReqPath(req));
@@ -253,13 +255,10 @@ app.post('/ideas', keycloak.protect(), fetchUserId, upload.single('cover'), asyn
 			externalLinks: [],
 			date: new Date(),
 			supports: 0,
-			cover: req.file ? req.file.path : undefined,
+			cover: req.file ? req.file.filename : undefined,
 		};
-
-		console.log(payload); // TODO: continue here
-
-		// const insertedId = await postDocument(_getReqPath(req), payload);
-		// res.json({ insertedId: insertedId });
+		const insertedId = await postDocument(_getReqPath(req), payload);
+		res.json({ insertedId: insertedId });
 
 	} catch (err) {
 		next(err);
