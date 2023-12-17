@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { Observable } from "rxjs";
 import { Change, Doc } from "sonddr-shared";
 
-const uri = "mongodb://0.0.0.0:27017,0.0.0.0:27018,0.0.0.0:27019/?replicaSet=rs0&readPreference=primary&ssl=false";
+const uri = "mongodb://0.0.0.0:27017/?replicaSet=sonddr";
 const client = new MongoClient(uri);
 const db = client.db("sonddr");
 
