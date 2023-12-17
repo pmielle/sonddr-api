@@ -1,0 +1,3 @@
+[submodule "sonddr-shared"]
+	path = sonddr-shared
+	url = git@github.com:pmielle/sonddr-shared.git
