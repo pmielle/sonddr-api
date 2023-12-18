@@ -1,6 +1,6 @@
 {
   "realm": "sonddr",
-  "auth-server-url": "http://0.0.0.0:8080/",
+  "auth-server-url": "http://keycloak:8080/",
   "resource": "sonddr-backend",
   "bearer-only": true
 }

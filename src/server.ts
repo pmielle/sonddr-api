@@ -21,7 +21,7 @@ const app = express();
 const server = createServer(app);
 const messagesWss = new WebSocketServer({ noServer: true });
 app.use(express.json());  // otherwise req.body is undefined
-app.use(cors({ origin: "http://0.0.0.0:4200" }));  // otherwise can't be reached by front
+app.use(cors({ origin: "http://localhost:4200" }));  // otherwise can't be reached by front
 
 // file upload
 // --------------------------------------------
@@ -554,7 +554,7 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 // ----------------------------------------------
 app.use(_errorHandler);
 
-server.listen(port, '0.0.0.0', () => {
+server.listen(port, () => {
 	console.log(`Listening on port ${port}`);
 	console.log(`\n`);
 });
