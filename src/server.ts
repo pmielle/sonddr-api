@@ -21,7 +21,7 @@ const app = express();
 const server = createServer(app);
 const messagesWss = new WebSocketServer({ noServer: true });
 app.use(express.json());  // otherwise req.body is undefined
-app.use(cors({ origin: "http://localhost:4200" }));  // otherwise can't be reached by front
+app.use(cors({ origin: "http://192.168.1.14:4200" }));  // otherwise can't be reached by front
 
 // file upload
 // --------------------------------------------
