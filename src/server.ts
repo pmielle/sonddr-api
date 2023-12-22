@@ -1,4 +1,3 @@
-import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types.js";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
@@ -21,7 +20,6 @@ const app = express();
 const server = createServer(app);
 const messagesWss = new WebSocketServer({ noServer: true });
 app.use(express.json());  // otherwise req.body is undefined
-app.use(cors({ origin: "http://192.168.1.14:4200" }));  // otherwise can't be reached by front
 
 // file upload
 // --------------------------------------------
@@ -33,9 +31,18 @@ const upload = multer({dest: multerPath, limits: {
 
 // authentication
 // ----------------------------------------------
+const keycloakUrl = process.env.KEYCLOAK_URL;
+if (! keycloakUrl) { throw new Error(`Failed to get KEYCLOAK_URL from env`); }
 const memoryStore = new session.MemoryStore();
 app.use(session({ secret: 'some secret', saveUninitialized: true, resave: false, store: memoryStore }));
-const keycloak = new KeycloakConnect({ store: memoryStore });  // reads keycloak.json
+const keycloak = new KeycloakConnect({ store: memoryStore }, {
+  "auth-server-url": `http://${process.env.KEYCLOAK_URL}/auth/`,
+  "realm": "sonddr",
+  "resource": "sonddr-backend",
+  "confidential-port": 8443,
+  "bearer-only": true,
+  "ssl-required": "none",
+});
 app.use(keycloak.middleware());
 
 async function fetchUserId(req: Request, res: Response, next: NextFunction) {
@@ -62,9 +69,11 @@ async function authenticateRequest(req: Request): Promise<void> {
 
 // routes
 // ----------------------------------------------
-app.use("/uploads", express.static(multerPath));
+const router = express.Router();
 
-app.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.use("/uploads", express.static(multerPath));
+
+router.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const doc = await getDocument<Vote>(_getReqPath(req));
 		if (doc.authorId !== req["userId"]) {
@@ -86,7 +95,7 @@ app.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next)
 	}
 });
 
-app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const value = _getFromReqBody<number>("value", req);
 		if (![1, -1].includes(value)) { throw new Error(`Value must be 1 or -1`); }
@@ -120,7 +129,7 @@ app.put(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) =>
 	}
 });
 
-app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const doc = await getDocument<Cheer>(_getReqPath(req));
 		if (doc.authorId !== req["userId"]) {
@@ -134,7 +143,7 @@ app.delete(`/cheers/:id`, keycloak.protect(), fetchUserId, async (req, res, next
 	}
 });
 
-app.get('/cheers/:id', keycloak.protect(), async (req, res, next) => {
+router.get('/cheers/:id', keycloak.protect(), async (req, res, next) => {
 	try {
 		const doc = await getDocument<Cheer>(_getReqPath(req));
 		res.json(doc);
@@ -143,7 +152,7 @@ app.get('/cheers/:id', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const ideaId = _getFromReqBody("ideaId", req);
 		const userId = req["userId"];
@@ -161,7 +170,7 @@ app.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next) =
 	}
 });
 
-app.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const dbDoc = await getDocument<DbComment>(_getReqPath(req));
 		const user = await getDocument<User>(`users/${dbDoc.authorId}`);
@@ -181,7 +190,7 @@ app.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next)
 	}
 });
 
-app.post('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.post('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const payload = {
 			ideaId: _getFromReqBody("ideaId", req),
@@ -197,7 +206,7 @@ app.post('/comments', keycloak.protect(), fetchUserId, async (req, res, next) =>
 	}
 });
 
-app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const fromUserId = req["userId"];
 		const toUserId = _getFromReqBody("toUserId", req);
@@ -226,7 +235,7 @@ app.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, next)
 	};
 });
 
-app.get('/users', keycloak.protect(), async (req, res, next) => {
+router.get('/users', keycloak.protect(), async (req, res, next) => {
 	try {
 		const regex = req.query.regex;
 		const filters: Filter[] = [];
@@ -244,7 +253,7 @@ app.get('/users', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.post('/ideas', keycloak.protect(), fetchUserId, upload.single('cover'), async (req, res, next) => {
+router.post('/ideas', keycloak.protect(), fetchUserId, upload.single('cover'), async (req, res, next) => {
 	try {
 
 		const payload = {
@@ -265,7 +274,7 @@ app.post('/ideas', keycloak.protect(), fetchUserId, upload.single('cover'), asyn
 	}
 });
 
-app.put('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.put('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const payload = {
 			id: req["userId"],
@@ -280,7 +289,7 @@ app.put('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next) =>
 	};
 });
 
-app.get('/goals', keycloak.protect(), async (req, res, next) => {
+router.get('/goals', keycloak.protect(), async (req, res, next) => {
 	try {
 		const docs = await getDocuments<Goal>(_getReqPath(req), { field: "order", desc: false });
 		res.json(docs);
@@ -289,7 +298,7 @@ app.get('/goals', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
+router.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
 	try {
 		const doc = await getDocument<Goal>(_getReqPath(req));
 		res.json(doc);
@@ -298,7 +307,7 @@ app.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.get('/users/:id', keycloak.protect(), async (req, res, next) => {
+router.get('/users/:id', keycloak.protect(), async (req, res, next) => {
 	try {
 		const doc = await getDocument<User>(_getReqPath(req));
 		res.json(doc);
@@ -307,7 +316,7 @@ app.get('/users/:id', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
 		const cheerId = makeCheerId(dbDoc.id, req["userId"]);
@@ -331,7 +340,7 @@ app.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) =>
 	}
 });
 
-app.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const order = req.query.order || "date";
 		const goalId = req.query.goalId;
@@ -381,7 +390,7 @@ app.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	}
 });
 
-app.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const order = req.query.order || "date";
 		const ideaId = req.query.ideaId;
@@ -425,7 +434,7 @@ app.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) => 
 	}
 });
 
-app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
+router.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 	try {
 		const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
 		const doc = await reviveDiscussion(dbDoc);
@@ -435,7 +444,7 @@ app.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-app.get('/discussions', async (req, res, next) => {
+router.get('/discussions', async (req, res, next) => {
 	try {
 
 		await authenticateRequest(req);
@@ -465,7 +474,7 @@ app.get('/discussions', async (req, res, next) => {
 	}
 });
 
-app.get('/notifications', async (req, res, next) => {
+router.get('/notifications', async (req, res, next) => {
 	try {
 
 		await authenticateRequest(req);
@@ -491,6 +500,8 @@ app.get('/notifications', async (req, res, next) => {
 		next(err);
 	}
 });
+
+app.use("/api", router);
 
 
 // websockets
