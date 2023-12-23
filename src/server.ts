@@ -19,6 +19,9 @@ const port = 3000;
 const app = express();
 const server = createServer(app);
 const messagesWss = new WebSocketServer({ noServer: true });
+const basePath = "/api";
+const wsBasePath = "/api/ws";
+
 app.use(express.json());  // otherwise req.body is undefined
 
 // file upload
@@ -501,7 +504,7 @@ router.get('/notifications', async (req, res, next) => {
 	}
 });
 
-app.use("/api", router);
+app.use(basePath, router);
 
 
 // websockets
@@ -513,7 +516,7 @@ server.on("upgrade", async (incomingMessage, duplex, buffer) => {
 
 		await authenticateIncomingMessage(incomingMessage);
 
-		if (incomingMessage.url!.startsWith("/messages")) {
+		if (incomingMessage.url!.startsWith(`${wsBasePath}/messages`)) {
 			messagesWss.handleUpgrade(incomingMessage, duplex, buffer, (ws) => {
 				messagesWss.emit('connection', ws, incomingMessage);
 			});
