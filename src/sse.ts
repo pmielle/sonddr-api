@@ -14,6 +14,7 @@ export class SSE {
             'Content-Type': 'text/event-stream',
             'Connection': 'keep-alive',
             'Cache-Control': 'no-cache',
+	    'X-Accel-Buffering': 'no', // otherwise doesn't work behind reverse proxy
         });
     }
 
