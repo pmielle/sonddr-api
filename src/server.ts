@@ -557,7 +557,12 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 		// n.b. no need to dispatch anything, ChatRoom reacts to database changes
 	});
 
+	// heartbeat to keep the connection alive
+	// otherwise nginx timeouts after 60s
+	const pingId = setInterval(() => ws.ping(), 30000);
+
 	ws.on("close", () => {
+		clearInterval(pingId);  // stop ping loop
 		room.leave(userId);
 	});
 
