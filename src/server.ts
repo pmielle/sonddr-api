@@ -2,7 +2,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types.js";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId, ping_str } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse.js";
@@ -470,7 +470,14 @@ router.get('/discussions', async (req, res, next) => {
 			rxFilter(change => change.payload?.users.map(u => u.id).includes(userId)),
 		).subscribe(change => sse.send(change));
 
-		req.on("close", () => changesSub.unsubscribe());
+		// heartbeat to keep the connection alive
+		// otherwise nginx timeouts after 60s
+		const pingId = setInterval(() => sse.send(ping_str), 30000);
+
+		req.on("close", () => {
+			clearInterval(pingId);
+			changesSub.unsubscribe()
+		});
 
 	} catch (err) {
 		next(err);
@@ -497,7 +504,14 @@ router.get('/notifications', async (req, res, next) => {
 			rxFilter(change => change.payload?.toId === userId),
 		).subscribe(change => sse.send(change));
 
-		req.on("close", () => changesSub.unsubscribe());
+		// heartbeat to keep the connection alive
+		// otherwise nginx timeouts after 60s
+		const pingId = setInterval(() => sse.send(ping_str), 30000);
+		
+		req.on("close", () => {
+			clearInterval(pingId);
+			changesSub.unsubscribe()
+		});
 
 	} catch (err) {
 		next(err);
