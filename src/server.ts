@@ -39,7 +39,7 @@ if (! keycloakUrl) { throw new Error(`Failed to get KEYCLOAK_URL from env`); }
 const memoryStore = new session.MemoryStore();
 app.use(session({ secret: 'some secret', saveUninitialized: true, resave: false, store: memoryStore }));
 const keycloak = new KeycloakConnect({ store: memoryStore }, {
-  "auth-server-url": `http://${process.env.KEYCLOAK_URL}/auth/`,
+  "auth-server-url": keycloakUrl,
   "realm": "sonddr",
   "resource": "sonddr-backend",
   "confidential-port": 8443,
