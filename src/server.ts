@@ -495,13 +495,13 @@ router.get('/notifications', async (req, res, next) => {
 		const docs = await getDocuments<Notification>(
 			_getReqPath(req),
 			{ field: "date", desc: true },
-			{ field: "toId", operator: "eq", value: userId },
+			{ field: "toIds", operator: "in", value: [userId] },
 		);
 
 		sse.send(docs);
 
 		const changesSub = notificationsChanges$.pipe(
-			rxFilter(change => change.payload?.toId === userId),
+			rxFilter(change => change.payload?.toIds.includes(userId)),
 		).subscribe(change => sse.send(change));
 
 		// heartbeat to keep the connection alive
