@@ -229,6 +229,7 @@ router.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, ne
 			`discussions/${discussionId}`,
 			[
 				{ field: "lastMessageId", operator: "set", value: firstMessageId },
+				{ field: "readByIds", operator: "set", value: [ fromUserId ] },
 				{ field: "date", operator: "set", value: firstMessagePayload.date },
 			]
 		);
@@ -565,6 +566,7 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 			`discussions/${discussionId}`,
 			[
 				{ field: "lastMessageId", operator: "set", value: newMessageId },
+				{ field: "readByIds", operator: "set", value: [ userId ] },
 				{ field: "date", operator: "set", value: newMessagePayload.date },
 			]
 		);
