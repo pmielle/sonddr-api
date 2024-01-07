@@ -229,6 +229,7 @@ router.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, ne
 			`discussions/${discussionId}`,
 			[
 				{ field: "lastMessageId", operator: "set", value: firstMessageId },
+				{ field: "readByIds", operator: "set", value: [ fromUserId ] },
 				{ field: "date", operator: "set", value: firstMessagePayload.date },
 			]
 		);
@@ -437,6 +438,24 @@ router.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) 
 	}
 });
 
+router.patch('/discussions/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		await patchDocument(_getReqPath(req), {field: 'readByIds', operator: 'addToSet', value: req["userId"]});
+		res.send();
+	} catch (err) {
+		next(err);
+	}
+});
+
+router.patch('/notifications/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		await patchDocument(_getReqPath(req), {field: 'readByIds', operator: 'addToSet', value: req["userId"]});
+		res.send();
+	} catch (err) {
+		next(err);
+	}
+});
+
 router.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 	try {
 		const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
@@ -495,13 +514,13 @@ router.get('/notifications', async (req, res, next) => {
 		const docs = await getDocuments<Notification>(
 			_getReqPath(req),
 			{ field: "date", desc: true },
-			{ field: "toId", operator: "eq", value: userId },
+			{ field: "toIds", operator: "in", value: [userId] },
 		);
 
 		sse.send(docs);
 
 		const changesSub = notificationsChanges$.pipe(
-			rxFilter(change => change.payload?.toId === userId),
+			rxFilter(change => change.payload?.toIds.includes(userId)),
 		).subscribe(change => sse.send(change));
 
 		// heartbeat to keep the connection alive
@@ -565,6 +584,7 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 			`discussions/${discussionId}`,
 			[
 				{ field: "lastMessageId", operator: "set", value: newMessageId },
+				{ field: "readByIds", operator: "set", value: [ userId ] },
 				{ field: "date", operator: "set", value: newMessagePayload.date },
 			]
 		);
