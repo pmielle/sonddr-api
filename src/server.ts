@@ -447,6 +447,15 @@ router.patch('/discussions/:id', keycloak.protect(), fetchUserId, async (req, re
 	}
 });
 
+router.patch('/notifications/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		await patchDocument(_getReqPath(req), {field: 'readByIds', operator: 'addToSet', value: req["userId"]});
+		res.send();
+	} catch (err) {
+		next(err);
+	}
+});
+
 router.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 	try {
 		const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
