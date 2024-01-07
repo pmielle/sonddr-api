@@ -1,7 +1,25 @@
-import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage } from "sonddr-shared";
-import { watchCollection } from "./database.js";
-import { Subject, switchMap } from "rxjs";
+import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User } from "sonddr-shared";
+import { getDocument, postDocument, watchCollection } from "./database.js";
+import { Subject, filter, switchMap } from "rxjs";
 import { reviveMessage, reviveDiscussion } from "./revivers.js";
+
+watchCollection<DbComment>("comments").pipe(
+	filter(change => change.type === "insert")
+).subscribe(async change => {
+	const dbComment = change.payload;
+	const [commentAuthor, idea] = await Promise.all([
+		getDocument<User>(`users/${change.payload.authorId}`),
+		getDocument<DbIdea>(`ideas/${dbComment.ideaId}`),
+	]);
+	if (commentAuthor.id === idea.authorId) { return; }  // do not notify
+	const notificationPayload = {
+		toIds: [idea.authorId],
+		date: new Date(),
+		readByIds: [],
+		content: `${commentAuthor.name} has commented on ${idea.title}: "${dbComment.content}"`,
+	};
+	postDocument(`notifications`, notificationPayload);
+});
 
 export const notificationsChanges$: Subject<Change<Notification>> = new Subject();
 watchCollection<Notification>("notifications").subscribe(notificationsChanges$);
