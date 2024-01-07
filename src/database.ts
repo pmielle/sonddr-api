@@ -21,7 +21,7 @@ export type Filter = {
 
 export type Patch = {
     field: string,
-    operator: "set"|"inc",
+    operator: "set"|"inc"|"addToSet",
     value: any,
 };
 
