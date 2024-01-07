@@ -216,6 +216,7 @@ router.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, ne
 		const firstMessageContent = _getFromReqBody("firstMessageContent", req);
 		const discussionPayload = {
 			userIds: [fromUserId, toUserId],
+			readByIds: [],
 		};
 		const discussionId = await postDocument(_getReqPath(req), discussionPayload);
 		const firstMessagePayload = {
