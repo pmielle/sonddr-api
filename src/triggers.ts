@@ -1,14 +1,32 @@
-import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User } from "sonddr-shared";
+import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User, Cheer } from "sonddr-shared";
 import { getDocument, postDocument, watchCollection } from "./database.js";
 import { Subject, filter, switchMap } from "rxjs";
 import { reviveMessage, reviveDiscussion } from "./revivers.js";
+
+watchCollection<Cheer>("cheers").pipe(
+	filter(change => change.type === "insert")
+).subscribe(async change => {
+	const cheer = change.payload;
+	const [commentAuthor, idea] = await Promise.all([
+		getDocument<User>(`users/${cheer.authorId}`),
+		getDocument<DbIdea>(`ideas/${cheer.ideaId}`),
+	]);
+	if (commentAuthor.id === idea.authorId) { return; }  // do not notify
+	const notificationPayload = {
+		toIds: [idea.authorId],
+		date: new Date(),
+		readByIds: [],
+		content: `${commentAuthor.name} cheers for ${idea.title}`,
+	};
+	postDocument(`notifications`, notificationPayload);
+});
 
 watchCollection<DbComment>("comments").pipe(
 	filter(change => change.type === "insert")
 ).subscribe(async change => {
 	const dbComment = change.payload;
 	const [commentAuthor, idea] = await Promise.all([
-		getDocument<User>(`users/${change.payload.authorId}`),
+		getDocument<User>(`users/${dbComment.authorId}`),
 		getDocument<DbIdea>(`ideas/${dbComment.ideaId}`),
 	]);
 	if (commentAuthor.id === idea.authorId) { return; }  // do not notify
