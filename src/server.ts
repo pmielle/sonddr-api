@@ -258,19 +258,34 @@ router.get('/users', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-router.post('/ideas', keycloak.protect(), fetchUserId, upload.single('cover'), async (req, res, next) => {
+router.post('/ideas', keycloak.protect(), fetchUserId, upload.fields([
+	{ name: "cover", maxCount: 1 },
+	{ name: "images" },
+]), async (req, res, next) => {
 	try {
 
+		let content = _getFromReqBody<string>("content", req);
+		const cover: Express.Multer.File = req.files["cover"];
+		const images: Express.Multer.File[] = req.files["images"];
+
+		images.forEach((image) => {
+			content = content.replace(
+				new RegExp(`<img src=".+?" id="${image.originalname}">`),
+				           `<img src="${image.filename}">`
+			);
+		});
+		
 		const payload = {
 			title: _getFromReqBody("title", req),
 			authorId: req["userId"],
 			goalIds: JSON.parse(_getFromReqBody("goalIds", req)),
-			content: _getFromReqBody("content", req),
+			content: content,
 			externalLinks: [],
 			date: new Date(),
 			supports: 0,
-			cover: req.file ? req.file.filename : undefined,
+			cover: cover ? cover.filename : undefined,
 		};
+
 		const insertedId = await postDocument(_getReqPath(req), payload);
 		res.json({ insertedId: insertedId });
 
@@ -339,6 +354,7 @@ router.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next)
 		data["author"] = author;
 		data["goals"] = goals;
 		data["userHasCheered"] = userHasCheered;
+		data["content"] = _fixImageSources(data["content"]);
 		res.json(data);
 	} catch (err) {
 		next(err);
@@ -616,6 +632,10 @@ server.listen(port, () => {
 
 // private
 // ----------------------------------------------
+function _fixImageSources(content: string) {
+	return content.replaceAll(/<img src="(.+?)">/g, `<img src="${basePath}/${multerPath}/$1">`);
+}
+
 function _getReqPath(req: Request): string {
 	let path = req.path;
 	if (path.charAt(0) == "/") {
