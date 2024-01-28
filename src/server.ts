@@ -268,7 +268,7 @@ router.post('/ideas', keycloak.protect(), fetchUserId, upload.fields([
 		const cover: Express.Multer.File = req.files["cover"];
 		const images: Express.Multer.File[] = req.files["images"];
 
-		images.forEach((image) => {
+		images?.forEach((image) => {
 			content = content.replace(
 				new RegExp(`<img src=".+?" id="${image.originalname}">`),
 				           `<img src="${image.filename}">`
