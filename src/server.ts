@@ -265,7 +265,7 @@ router.post('/ideas', keycloak.protect(), fetchUserId, upload.fields([
 	try {
 
 		let content = _getFromReqBody<string>("content", req);
-		const cover: Express.Multer.File = req.files["cover"];
+		const cover: Express.Multer.File = req.files["cover"][0];
 		const images: Express.Multer.File[] = req.files["images"];
 
 		images?.forEach((image) => {
