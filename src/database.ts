@@ -33,17 +33,19 @@ export function watchCollection<T>(path: string, filter?: Filter|Filter[]): Obse
     const pipeline = [{'$match': filterObj}];
     // watch changes
     // fullDocumentBeforeChanges is only available for mongodb v6
-    const changes = db.collection(path).watch(pipeline, {fullDocument: "updateLookup"});
+    const changes = db.collection(path).watch(pipeline, {fullDocument: "updateLookup", fullDocumentBeforeChange: "whenAvailable"});
     return new Observable((subscriber) => {
         changes.on("change", (change) => {
             switch (change.operationType) {
 
                 case "delete": {
+		    const dbDoc = change.fullDocumentBeforeChange;	
+		    const payload = _convertDbDocToDoc(dbDoc);
                     const docId = change.documentKey._id.toString();
                     subscriber.next({
                         type: "delete", 
                         docId: docId,
-                        payload: undefined,
+                        payload: payload as T,
                     });
                     break;
                 }

@@ -87,10 +87,10 @@ export class ChatRoom {
 
 	_listenToDatabase() {
 		this.databaseSub = messagesChanges$.pipe(
-			rxFilter(change => change.payload?.discussionId === this.discussionId)
+			rxFilter(change => change.payload.discussionId === this.discussionId)
 		).subscribe(change => {
 			for (const [userId, ws] of this.clients) {
-				const changeToSend = (change.type === "insert" && change.payload!.author.id === userId)
+				const changeToSend = (change.type === "insert" && change.payload.author.id === userId)
 					? { ...change, type: "update", docId: placeholder_id } as Change<Message>
 					: change;
 				this._send(changeToSend, ws);

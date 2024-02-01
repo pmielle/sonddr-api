@@ -2,7 +2,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types.js";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId, ping_str } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId, ping_str, delete_str } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse.js";
@@ -265,7 +265,7 @@ router.post('/ideas', keycloak.protect(), fetchUserId, upload.fields([
 	try {
 
 		let content = _getFromReqBody<string>("content", req);
-		const cover: Express.Multer.File = req.files["cover"][0];
+		const cover: Express.Multer.File = req.files["cover"]?.pop();
 		const images: Express.Multer.File[] = req.files["images"];
 
 		images?.forEach((image) => {
@@ -590,22 +590,36 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 	// n.b. no need to send previous messages, ChatRoom does it
 
 	ws.on("message", async (data) => {
-		const newMessagePayload = {
-			discussionId: discussionId,
-			authorId: userId,
-			date: new Date(),
-			content: data.toString(),
-		};
-		const newMessageId = await postDocument('messages', newMessagePayload);
-		patchDocument(
-			`discussions/${discussionId}`,
-			[
-				{ field: "lastMessageId", operator: "set", value: newMessageId },
-				{ field: "readByIds", operator: "set", value: [ userId ] },
-				{ field: "date", operator: "set", value: newMessagePayload.date },
-			]
-		);
+
+		const message = data.toString();
+
+
+		if (message.startsWith(delete_str)) {
+
+			const messageId = message.substring(delete_str.length);
+			await deleteDocument(`messages/${messageId}`);
+
+		} else {
+
+			const newMessagePayload = {
+				discussionId: discussionId,
+				authorId: userId,
+				date: new Date(),
+				content: message,
+			};
+			const newMessageId = await postDocument('messages', newMessagePayload);
+			patchDocument(
+				`discussions/${discussionId}`,
+				[
+					{ field: "lastMessageId", operator: "set", value: newMessageId },
+					{ field: "readByIds", operator: "set", value: [ userId ] },
+					{ field: "date", operator: "set", value: newMessagePayload.date },
+				]
+			);
+
+		}
 		// n.b. no need to dispatch anything, ChatRoom reacts to database changes
+
 	});
 
 	// heartbeat to keep the connection alive

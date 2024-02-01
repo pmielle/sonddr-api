@@ -45,12 +45,7 @@ watchCollection<Notification>("notifications").subscribe(notificationsChanges$);
 export const discussionsChanges$: Subject<Change<Discussion>> = new Subject(); 
 watchCollection<DbDiscussion>("discussions").pipe(
     switchMap(async change => {
-        let revivedPayload: Discussion|undefined;
-        if (change.payload) {
-            revivedPayload = await reviveDiscussion(change.payload);
-        } else {
-            revivedPayload = undefined;
-        }
+        let revivedPayload = await reviveDiscussion(change.payload);
         return {...change, payload: revivedPayload};
     })
 ).subscribe(discussionsChanges$);
@@ -58,12 +53,7 @@ watchCollection<DbDiscussion>("discussions").pipe(
 export const messagesChanges$: Subject<Change<Message>> = new Subject(); 
 watchCollection<DbMessage>("messages").pipe(
     switchMap(async change => {
-        let revivedPayload: Message|undefined;
-        if (change.payload) {
-            revivedPayload = await reviveMessage(change.payload);
-        } else {
-            revivedPayload = undefined;
-        }
+        let revivedPayload = await reviveMessage(change.payload);
         return {...change, payload: revivedPayload};
     })
 ).subscribe(messagesChanges$);
