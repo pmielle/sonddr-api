@@ -224,6 +224,7 @@ router.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, ne
 			authorId: fromUserId,
 			content: firstMessageContent,
 			date: new Date(),
+			deleted: false,
 		};
 		const firstMessageId = await postDocument('messages', firstMessagePayload);
 		await patchDocument(
@@ -599,7 +600,10 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 
 			await patchDocument(
 				`messages/${messageId}`,
-				{ field: "content", operator: "set", value: delete_str }
+				[
+					{ field: "deleted", operator: "set", value: true },
+					{ field: "content", operator: "set", value: "Deleted" },
+				]
 			);
 
 		} else {
@@ -609,6 +613,7 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 				authorId: userId,
 				date: new Date(),
 				content: message,
+				deleted: false,
 			};
 			const newMessageId = await postDocument('messages', newMessagePayload);
 			patchDocument(
