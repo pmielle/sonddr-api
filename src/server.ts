@@ -593,11 +593,14 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 
 		const message = data.toString();
 
-
 		if (message.startsWith(delete_str)) {
 
 			const messageId = message.substring(delete_str.length);
-			await deleteDocument(`messages/${messageId}`);
+
+			await patchDocument(
+				`messages/${messageId}`,
+				{ field: "content", operator: "set", value: delete_str }
+			);
 
 		} else {
 
