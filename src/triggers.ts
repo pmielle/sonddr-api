@@ -11,6 +11,9 @@ watchCollection<Idea>("ideas").pipe(
 	// delete its images
 	const idea = change.payload;
 	if (idea.cover) { deleteUpload(idea.cover); }
+	for (const path of idea.content.matchAll(/<img src="(?<path>\w+)">/g)) {
+		deleteUpload(path.groups["path"]);
+	}
 	// find the comments of this idea
 	// and remove their votes
 	const comments = await getDocuments<DbComment>(
