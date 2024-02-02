@@ -12,9 +12,8 @@ import { filter as rxFilter } from "rxjs";
 import { ChatRoom, ChatRoomManager } from "./chat-room.js";
 import { createServer, IncomingMessage } from "http";
 import { WebSocketServer } from "ws";
-import multer from "multer";
+import { multerPath, upload } from "./uploads.js";
 
-const b_in_mb = 1048576;
 const port = 3000;
 const app = express();
 const server = createServer(app);
@@ -23,14 +22,6 @@ const basePath = "/api";
 const wsBasePath = "/api/ws";
 
 app.use(express.json());  // otherwise req.body is undefined
-
-// file upload
-// --------------------------------------------
-const multerPath = "uploads";
-const upload = multer({dest: multerPath, limits: {
-	files: 20,
-	fileSize: 50 * b_in_mb,
-} });
 
 // authentication
 // ----------------------------------------------

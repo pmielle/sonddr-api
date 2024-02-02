@@ -2,11 +2,15 @@ import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbC
 import { deleteDocument, deleteDocuments, getDocument, getDocuments, postDocument, watchCollection } from "./database.js";
 import { Subject, filter, switchMap } from "rxjs";
 import { reviveMessage, reviveDiscussion } from "./revivers.js";
+import { deleteUpload } from "./uploads.js";
 
 watchCollection<Idea>("ideas").pipe(
 	filter(change => change.type === "delete")
 ).subscribe(async (change) => {
 	const ideaId = change.docId;
+	// delete its images
+	const idea = change.payload;
+	if (idea.cover) { deleteUpload(idea.cover); }
 	// find the comments of this idea
 	// and remove their votes
 	const comments = await getDocuments<DbComment>(
