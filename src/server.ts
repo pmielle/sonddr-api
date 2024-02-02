@@ -259,6 +259,17 @@ router.get('/users', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
+router.delete('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		const idea = await getDocument<DbIdea>(_getReqPath(req)); 
+		if (idea.authorId !== req["userId"]) { res.status(401).send(); }
+		await deleteDocument(_getReqPath(req));
+		res.send();
+	} catch (err) {
+		next(err);
+	}
+});
+
 router.post('/ideas', keycloak.protect(), fetchUserId, upload.fields([
 	{ name: "cover", maxCount: 1 },
 	{ name: "images" },

@@ -133,6 +133,17 @@ export async function getDocuments<T extends Doc>(path: string, order?: Order, f
     return docs as any;  // typescript??
 }
 
+// returns the number of deleted documents
+export async function deleteDocuments(path: string, filter: Filter|Filter[]): Promise<number> {
+	// filter
+	let filterObj = filter 
+		? _convertFiltersToDbFilter(Array.isArray(filter) ? filter : [filter]) 
+		: {};
+	// delete
+	const result = await db.collection(path).deleteMany(filterObj);
+	return result.deletedCount;
+}
+
 export async function postDocument(path: string, payload: object): Promise<string> {
     // do not allow "id" in payload
     if ("id" in payload) {

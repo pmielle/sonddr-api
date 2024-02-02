@@ -1,7 +1,25 @@
-import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User, Cheer } from "sonddr-shared";
-import { getDocument, postDocument, watchCollection } from "./database.js";
+import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User, Cheer, Idea } from "sonddr-shared";
+import { deleteDocument, deleteDocuments, getDocument, getDocuments, postDocument, watchCollection } from "./database.js";
 import { Subject, filter, switchMap } from "rxjs";
 import { reviveMessage, reviveDiscussion } from "./revivers.js";
+
+watchCollection<Idea>("ideas").pipe(
+	filter(change => change.type === "delete")
+).subscribe(async (change) => {
+	const ideaId = change.docId;
+	// find the comments of this idea
+	// and remove their votes
+	const comments = await getDocuments<DbComment>(
+		`comments`,
+		{field: "date", desc: true },
+		{ field: "ideaId", operator: "eq", value: ideaId },
+	);
+	const commentIds = comments.map(c => c.id);
+	Promise.all([
+		deleteDocuments(`comments`, {field: "ideaId", operator: "eq", value: ideaId}),
+		deleteDocuments(`votes`, {field: "commentId", operator: "in", value: commentIds}),
+	]);
+});
 
 watchCollection<Cheer>("cheers").pipe(
 	filter(change => change.type === "insert")
