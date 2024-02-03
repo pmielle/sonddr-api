@@ -1,8 +1,15 @@
 import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User, Cheer, Idea } from "sonddr-shared";
-import { deleteDocument, deleteDocuments, getDocument, getDocuments, postDocument, watchCollection } from "./database.js";
+import { deleteDocuments, getDocument, getDocuments, postDocument, watchCollection } from "./database.js";
 import { Subject, filter, switchMap } from "rxjs";
 import { reviveMessage, reviveDiscussion } from "./revivers.js";
 import { deleteUpload } from "./uploads.js";
+
+watchCollection<DbComment>("comments").pipe(
+	filter(change => change.type === "delete")
+).subscribe(async (change) => {
+	const commentId = change.docId;
+	deleteDocuments(`votes`, {field: "commentId", operator: "eq", value: commentId});
+});
 
 watchCollection<Idea>("ideas").pipe(
 	filter(change => change.type === "delete")
