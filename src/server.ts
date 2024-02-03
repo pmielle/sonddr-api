@@ -170,8 +170,8 @@ router.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, ne
 		const user = await getDocument<User>(`users/${dbDoc.authorId}`);
 		const { authorId, ...doc } = dbDoc;
 		doc["author"] = user;
+		doc["fromUser"] = authorId === req["userId"];
 
-		// check if the user has voted
 		try {
 			const voteId = makeVoteId(dbDoc.id, req["userId"]);
 			const vote = await getDocument<Vote>(`votes/${voteId}`);
@@ -253,7 +253,7 @@ router.get('/users', keycloak.protect(), async (req, res, next) => {
 router.delete('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const idea = await getDocument<DbIdea>(_getReqPath(req)); 
-		if (idea.authorId !== req["userId"]) { res.status(401).send(); }
+		if (idea.authorId !== req["userId"]) { throw new Error("Unauthorized"); }
 		await deleteDocument(_getReqPath(req));
 		res.send();
 	} catch (err) {
@@ -264,7 +264,7 @@ router.delete('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, ne
 router.delete('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const comment = await getDocument<DbComment>(_getReqPath(req)); 
-		if (comment.authorId !== req["userId"]) { res.status(401).send(); }
+		if (comment.authorId !== req["userId"]) { throw new Error("Unauthorized"); }
 		await deleteDocument(_getReqPath(req));
 		res.send();
 	} catch (err) {
@@ -368,6 +368,7 @@ router.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next)
 		data["author"] = author;
 		data["goals"] = goals;
 		data["userHasCheered"] = userHasCheered;
+		data["fromUser"] = authorId === req["userId"];
 		data["content"] = _fixImageSources(data["content"]);
 		res.json(data);
 	} catch (err) {
@@ -417,6 +418,7 @@ router.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => 
 			data["author"] = authors.find(u => u.id === authorId);
 			data["goals"] = goals.filter(g => goalIds.includes(g.id));
 			data["userHasCheered"] = cheers.find(c => c.ideaId === dbDoc.id) ? true : false;
+			data["fromUser"] = authorId === req["userId"];
 			return data as any // typescript?? 
 		});
 		res.json(docs);
@@ -461,6 +463,7 @@ router.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) 
 			data["author"] = authors.find(u => u.id === authorId);
 			const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
 			data["userVote"] = vote ? vote.value : undefined;
+			data["fromUser"] = authorId === req["userId"];
 			return data as any // typescript?? 
 		});
 		res.json(docs);
