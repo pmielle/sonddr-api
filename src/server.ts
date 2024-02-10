@@ -74,9 +74,18 @@ router.patch(`/ideas/:id`, keycloak.protect(), fetchUserId, async (req, res, nex
 		const idea = await getDocument<DbIdea>(path);
 		if (! idea) { throw new Error(`Idea not found`); }
 		if (! idea.authorId === req["userId"]) { throw new Error(`Unauthorized`); }
-		// actually add it
-		const externalLink = _getFromReqBody("externalLink", req);
-		await patchDocument(path, {field: 'externalLinks', operator: 'addToSet', value: externalLink});
+		// find links to remove or to add
+		const linkToRemove = req.body["removeExternalLink"];
+		const linkToAdd = req.body["addExternalLink"];
+		if (!linkToRemove && !linkToAdd) { throw new Error(`Both remove- and addExternalLink are missing`); }
+		const promises: Promise<void>[] = [];
+		if (linkToRemove) { promises.push(patchDocument(path, {
+			field: 'externalLinks',
+			operator: 'pull',
+			value: { type: linkToRemove.type },
+		})) }
+		if (linkToAdd) { promises.push(patchDocument(path, {field: 'externalLinks', operator: 'addToSet', value: linkToAdd})) }
+		await Promise.all(promises);
 		res.send();
 	} catch(err) {
 		next(err);
