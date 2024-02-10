@@ -67,6 +67,22 @@ const router = express.Router();
 
 router.use("/uploads", express.static(multerPath));
 
+router.patch(`/ideas/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		// only the idea author is allowed to add an external link
+		const path = _getReqPath(req);
+		const idea = await getDocument<DbIdea>(path);
+		if (! idea) { throw new Error(`Idea not found`); }
+		if (! idea.authorId === req["userId"]) { throw new Error(`Unauthorized`); }
+		// actually add it
+		const externalLink = _getFromReqBody("externalLink", req);
+		await patchDocument(path, {field: 'externalLinks', operator: 'addToSet', value: externalLink});
+		res.send();
+	} catch(err) {
+		next(err);
+	}
+});
+
 router.delete(`/votes/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const doc = await getDocument<Vote>(_getReqPath(req));
