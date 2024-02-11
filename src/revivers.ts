@@ -1,22 +1,41 @@
-import { DbDiscussion, DbMessage, Discussion, Doc, Message, User } from "sonddr-shared";
+import { DbDiscussion, DbMessage, User, DbUser, Discussion, Doc, Message } from "sonddr-shared";
 import { getDocuments } from "./database.js";
 
 
-export async function reviveMessage(dbDoc: DbMessage): Promise<Message> {
-    return (await reviveMessages([dbDoc]))[0];
+export function reviveUser(dbDoc: DbUser, userId: string|undefined): User {
+	return reviveUsers([dbDoc], userId)[0];
 }
 
-export async function reviveMessages(dbDocs: DbMessage[]): Promise<Message[]> {
+export function reviveUsers(dbDocs: DbUser[], userId: string|undefined): User[] {
+
+    if (dbDocs.length == 0) { return []; }
+
+    // convert dbDocs into docs
+    const docs: User[] = dbDocs.map((dbDoc) => {
+        dbDoc["isUser"] = userId === undefined ? undefined : dbDoc.id === userId;
+        return dbDoc as any;
+    });
+
+    // return
+    return docs;
+
+}
+
+export async function reviveMessage(dbDoc: DbMessage, userId: string|undefined): Promise<Message> {
+    return (await reviveMessages([dbDoc], userId))[0];
+}
+
+export async function reviveMessages(dbDocs: DbMessage[], userId: string|undefined): Promise<Message[]> {
 
     if (dbDocs.length == 0) { return []; }
 
     // get users
     let usersToGet = _getUnique(dbDocs, "authorId");
-    const users = await getDocuments<User>(
+    const users = await getDocuments<DbUser>(
         "users", 
         undefined, 
         {field: "id", operator: "in", value: usersToGet}
-    );
+    ).then(dbDocs => reviveUsers(dbDocs, userId));
 
     // convert dbDocs into docs
     const docs: Message[] = dbDocs.map((dbDoc) => {
@@ -52,11 +71,11 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
     // get users (userIds + lastMessages authorIds)
     let usersToGet = _getUniqueInArray(dbDocs, "userIds");
     usersToGet.concat(_getUnique(messageDocs, "authorId"));
-    const users = await getDocuments<User>(
+    const users = await getDocuments<DbUser>(
         "users", 
         undefined, 
         {field: "id", operator: "in", value: usersToGet}
-    );
+    ).then(dbDocs => reviveUsers(dbDocs, undefined));
 
     // convert dbDocs into docs
     const messages: Message[] = messageDocs.map((dbDoc) => {
@@ -81,7 +100,6 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
 function _getUnique<T extends Doc, U extends keyof T>(collection: T[], key: U): T[U][] {
     return Array.from(collection.reduce((result, current) => {
         if (key in current) {  // key might be optional
-            // TODO: fix, this crashes upon delete I think
             result.add(current[key] as T[U]);
         }
         return result;

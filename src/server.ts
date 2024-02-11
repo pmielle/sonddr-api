@@ -2,11 +2,11 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types.js";
 import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, User, Vote, makeCheerId, makeVoteId, ping_str, delete_str } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, Vote, makeCheerId, makeVoteId, ping_str, delete_str, DbUser } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse.js";
-import { reviveDiscussion, reviveDiscussions } from "./revivers.js";
+import { reviveDiscussion, reviveDiscussions, reviveUser, reviveUsers } from "./revivers.js";
 import { discussionsChanges$, notificationsChanges$ } from "./triggers.js";
 import { filter as rxFilter } from "rxjs";
 import { ChatRoom, ChatRoomManager } from "./chat-room.js";
@@ -192,10 +192,9 @@ router.put('/cheers/:id', keycloak.protect(), fetchUserId, async (req, res, next
 router.get('/comments/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const dbDoc = await getDocument<DbComment>(_getReqPath(req));
-		const user = await getDocument<User>(`users/${dbDoc.authorId}`);
+		const user = await getDocument<DbUser>(`users/${dbDoc.authorId}`).then(dbDoc => reviveUser(dbDoc, req["userId"]));
 		const { authorId, ...doc } = dbDoc;
 		doc["author"] = user;
-		doc["fromUser"] = authorId === req["userId"];
 
 		try {
 			const voteId = makeVoteId(dbDoc.id, req["userId"]);
@@ -257,18 +256,18 @@ router.post('/discussions', keycloak.protect(), fetchUserId, async (req, res, ne
 	};
 });
 
-router.get('/users', keycloak.protect(), async (req, res, next) => {
+router.get('/users', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
 		const regex = req.query.regex;
 		const filters: Filter[] = [];
 		if (regex) {
 			filters.push({ field: "name", operator: "regex", value: regex });
 		}
-		const users = await getDocuments<User>(
+		const users = await getDocuments<DbUser>(
 			_getReqPath(req),
 			{ field: 'name', desc: false },
 			filters
-		);
+		).then(dbDocs => reviveUsers(dbDocs, req["userId"]));
 		res.json(users);
 	} catch (err) {
 		next(err);
@@ -366,9 +365,9 @@ router.get('/goals/:id', keycloak.protect(), async (req, res, next) => {
 	}
 });
 
-router.get('/users/:id', keycloak.protect(), async (req, res, next) => {
+router.get('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
-		const doc = await getDocument<User>(_getReqPath(req));
+		const doc = await getDocument<DbUser>(_getReqPath(req)).then(dbDoc => reviveUser(dbDoc, req["userId"]));
 		res.json(doc);
 	} catch (err) {
 		next(err);
@@ -380,7 +379,7 @@ router.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next)
 		const dbDoc = await getDocument<DbIdea>(_getReqPath(req));
 		const cheerId = makeCheerId(dbDoc.id, req["userId"]);
 		const [author, goals, userHasCheered] = await Promise.all([
-			getDocument<User>(`users/${dbDoc.authorId}`),
+			getDocument<DbUser>(`users/${dbDoc.authorId}`).then(dbDoc => reviveUser(dbDoc, req["userId"])),
 			getDocuments<Goal>("goals", undefined, { field: "id", operator: "in", value: dbDoc.goalIds }),
 			getDocument<Cheer>(`cheers/${cheerId}`)
 				.then(() => true)
@@ -393,7 +392,6 @@ router.get('/ideas/:id', keycloak.protect(), fetchUserId, async (req, res, next)
 		data["author"] = author;
 		data["goals"] = goals;
 		data["userHasCheered"] = userHasCheered;
-		data["fromUser"] = authorId === req["userId"];
 		data["content"] = _fixImageSources(data["content"]);
 		res.json(data);
 	} catch (err) {
@@ -430,7 +428,8 @@ router.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => 
 		const goalsToGet = _getUniqueInArray(dbDocs, "goalIds");
 		const cheersToGet = _getUnique(dbDocs, "id");
 		const [authors, goals, cheers] = await Promise.all([
-			getDocuments<User>("users", undefined, { field: "id", operator: "in", value: authorsToGet }),
+			getDocuments<DbUser>("users", undefined, { field: "id", operator: "in", value: authorsToGet })
+				.then(dbDocs => reviveUsers(dbDocs, req["userId"])),
 			getDocuments<Goal>("goals", undefined, { field: "id", operator: "in", value: goalsToGet }),
 			getDocuments<Cheer>("cheers", undefined, [
 				{ field: "ideaId", operator: "in", value: cheersToGet },
@@ -443,7 +442,6 @@ router.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => 
 			data["author"] = authors.find(u => u.id === authorId);
 			data["goals"] = goals.filter(g => goalIds.includes(g.id));
 			data["userHasCheered"] = cheers.find(c => c.ideaId === dbDoc.id) ? true : false;
-			data["fromUser"] = authorId === req["userId"];
 			return data as any // typescript?? 
 		});
 		res.json(docs);
@@ -476,7 +474,8 @@ router.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) 
 		const authorsToGet = _getUnique(dbDocs, "authorId");
 		const votesToGet = _getUnique(dbDocs, "id");
 		const [authors, votes] = await Promise.all([
-			getDocuments<User>("users", undefined, { field: "id", operator: "in", value: authorsToGet }),
+			getDocuments<DbUser>("users", undefined, { field: "id", operator: "in", value: authorsToGet })
+				.then(dbDocs => reviveUsers(dbDocs, req["userId"])),
 			getDocuments<Vote>("votes", undefined, [
 				{ field: "commentId", operator: "in", value: votesToGet },
 				{ field: "authorId", operator: "eq", value: req["userId"] },
@@ -488,7 +487,6 @@ router.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) 
 			data["author"] = authors.find(u => u.id === authorId);
 			const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
 			data["userVote"] = vote ? vote.value : undefined;
-			data["fromUser"] = authorId === req["userId"];
 			return data as any // typescript?? 
 		});
 		res.json(docs);
@@ -517,8 +515,8 @@ router.patch('/notifications/:id', keycloak.protect(), fetchUserId, async (req, 
 
 router.get('/discussions/:id', keycloak.protect(), async (req, res, next) => {
 	try {
-		const dbDoc = await getDocument<DbDiscussion>(_getReqPath(req));
-		const doc = await reviveDiscussion(dbDoc);
+		const doc = await getDocument<DbDiscussion>(_getReqPath(req))
+			.then(dbDoc => reviveDiscussion(dbDoc));
 		res.json(doc);
 	} catch (err) {
 		next(err);
@@ -535,12 +533,11 @@ router.get('/discussions', async (req, res, next) => {
 
 		const sse = new SSE(res);
 
-		const dbDocs = await getDocuments<DbDiscussion>(
+		const docs = await getDocuments<DbDiscussion>(
 			_getReqPath(req),
 			{ field: "date", desc: true },
 			{ ...filter },  // otherwise can't be reused in watch()
-		);
-		const docs = await reviveDiscussions(dbDocs);
+		).then(dbDocs => reviveDiscussions(dbDocs));
 
 		sse.send(docs);
 

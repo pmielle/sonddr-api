@@ -1,7 +1,7 @@
-import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, User, Cheer, Idea } from "sonddr-shared";
+import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, Cheer, Idea, DbUser, } from "sonddr-shared";
 import { deleteDocuments, getDocument, getDocuments, postDocument, watchCollection } from "./database.js";
 import { Subject, filter, switchMap } from "rxjs";
-import { reviveMessage, reviveDiscussion } from "./revivers.js";
+import { reviveMessage, reviveDiscussion, reviveUser, } from "./revivers.js";
 import { deleteUpload } from "./uploads.js";
 
 watchCollection<DbComment>("comments").pipe(
@@ -40,7 +40,7 @@ watchCollection<Cheer>("cheers").pipe(
 ).subscribe(async change => {
 	const cheer = change.payload;
 	const [commentAuthor, idea] = await Promise.all([
-		getDocument<User>(`users/${cheer.authorId}`),
+		getDocument<DbUser>(`users/${cheer.authorId}`).then(dbDocs => reviveUser(dbDocs, undefined)),
 		getDocument<DbIdea>(`ideas/${cheer.ideaId}`),
 	]);
 	if (commentAuthor.id === idea.authorId) { return; }  // do not notify
@@ -58,7 +58,7 @@ watchCollection<DbComment>("comments").pipe(
 ).subscribe(async change => {
 	const dbComment = change.payload;
 	const [commentAuthor, idea] = await Promise.all([
-		getDocument<User>(`users/${dbComment.authorId}`),
+		getDocument<DbUser>(`users/${dbComment.authorId}`).then(dbDoc => reviveUser(dbDoc, undefined)),
 		getDocument<DbIdea>(`ideas/${dbComment.ideaId}`),
 	]);
 	if (commentAuthor.id === idea.authorId) { return; }  // do not notify
@@ -85,7 +85,7 @@ watchCollection<DbDiscussion>("discussions").pipe(
 export const messagesChanges$: Subject<Change<Message>> = new Subject(); 
 watchCollection<DbMessage>("messages").pipe(
     switchMap(async change => {
-        let revivedPayload = await reviveMessage(change.payload);
+        let revivedPayload = await reviveMessage(change.payload, undefined);
         return {...change, payload: revivedPayload};
     })
 ).subscribe(messagesChanges$);
