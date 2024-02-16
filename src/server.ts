@@ -69,7 +69,7 @@ router.use("/uploads", express.static(multerPath));
 
 router.patch(`/ideas/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
 	try {
-		// only the idea author is allowed to add an external link
+		// only the idea author is allowed to edit its external links
 		const path = _getReqPath(req);
 		const idea = await getDocument<DbIdea>(path);
 		if (! idea) { throw new Error(`Idea not found`); }
@@ -84,7 +84,39 @@ router.patch(`/ideas/:id`, keycloak.protect(), fetchUserId, async (req, res, nex
 			operator: 'pull',
 			value: { type: linkToRemove.type },
 		})) }
-		if (linkToAdd) { promises.push(patchDocument(path, {field: 'externalLinks', operator: 'addToSet', value: linkToAdd})) }
+		if (linkToAdd) { promises.push(patchDocument(path, {
+			field: 'externalLinks',
+			operator: 'addToSet',
+			value: linkToAdd,
+		})) }
+		await Promise.all(promises);
+		res.send();
+	} catch(err) {
+		next(err);
+	}
+});
+
+router.patch(`/users/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+	try {
+		// only the user is allowed to edits its external links
+		const path = _getReqPath(req);
+		const userId = req.params["id"];
+		if (! userId === req["userId"]) { throw new Error(`Unauthorized`); }
+		// find links to remove or to add
+		const linkToRemove = req.body["removeExternalLink"];
+		const linkToAdd = req.body["addExternalLink"];
+		if (!linkToRemove && !linkToAdd) { throw new Error(`Both remove- and addExternalLink are missing`); }
+		const promises: Promise<void>[] = [];
+		if (linkToRemove) { promises.push(patchDocument(path, {
+			field: 'externalLinks',
+			operator: 'pull',
+			value: { type: linkToRemove.type },
+		})) }
+		if (linkToAdd) { promises.push(patchDocument(path, {
+			field: 'externalLinks',
+			operator: 'addToSet',
+			value: linkToAdd,
+		})) }
 		await Promise.all(promises);
 		res.send();
 	} catch(err) {
