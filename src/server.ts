@@ -338,7 +338,8 @@ router.put('/users/:id', keycloak.protect(), fetchUserId, async (req, res, next)
 			id: req["userId"],
 			name: _getFromReqBody("name", req),
 			date: new Date(),
-			bio: null,
+			externalLinks: [],
+			bio: "",
 		};
 		await putDocument(_getReqPath(req), payload);
 		res.send();
