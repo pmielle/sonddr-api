@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError } from "./types.js";
-import { Filter, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
+import { Filter, Patch, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
 import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, Vote, makeCheerId, makeVoteId, ping_str, delete_str, DbUser } from "sonddr-shared";
 import session from "express-session";
@@ -67,29 +67,61 @@ const router = express.Router();
 
 router.use("/uploads", express.static(multerPath));
 
-router.patch(`/ideas/:id`, keycloak.protect(), fetchUserId, async (req, res, next) => {
+router.patch(`/ideas/:id`, keycloak.protect(), fetchUserId, upload.fields([
+	{ name: "cover", maxCount: 1 },
+	{ name: "images" },
+]), async (req, res, next) => {
 	try {
-		// only the idea author is allowed to edit its external links
+		// only the idea author is allowed to edit
 		const path = _getReqPath(req);
 		const idea = await getDocument<DbIdea>(path);
 		if (! idea) { throw new Error(`Idea not found`); }
 		if (! idea.authorId === req["userId"]) { throw new Error(`Unauthorized`); }
+
+		// find fields to update
+		let content = req.body["content"];
+		const title = req.body["title"];
+		const goalIds = req.body["goalIds"];
+		const cover: Express.Multer.File|undefined = req.files?.["cover"]?.pop();
+		if (content !== undefined) {
+			const images: Express.Multer.File[]|undefined = req.files?.["images"];
+			images?.forEach((image) => {
+				content = content.replace(
+					new RegExp(`<img src=".+?" id="${image.originalname}">`),
+						   `<img src="${image.filename}">`
+				);
+			});
+			// images that were already present should be re-formatted to remove any prefix added by the frontend
+			content = content.replace(/<img src=".*\/(\w+)">/g, `<img src="$1">`);
+		}
+		let patches: Patch[] = [];
+		if (content !== undefined) { patches.push({operator: "set", field: "content", value: content }); }
+		if (title !== undefined) { patches.push({operator: "set", field: "title", value: title }); }
+		if (goalIds !== undefined) { patches.push({operator: "set", field: "goalIds", value: JSON.parse(goalIds) }); }
+		if (cover !== undefined) { patches.push({operator: "set", field: "cover", value: cover.filename }); }
+		if (patches.length > 0) {
+			await patchDocument(path, patches);
+		}
+
 		// find links to remove or to add
 		const linkToRemove = req.body["removeExternalLink"];
 		const linkToAdd = req.body["addExternalLink"];
-		if (!linkToRemove && !linkToAdd) { throw new Error(`Both remove- and addExternalLink are missing`); }
-		const promises: Promise<void>[] = [];
-		if (linkToRemove) { promises.push(patchDocument(path, {
-			field: 'externalLinks',
-			operator: 'pull',
-			value: { type: linkToRemove.type },
-		})) }
-		if (linkToAdd) { promises.push(patchDocument(path, {
-			field: 'externalLinks',
-			operator: 'addToSet',
-			value: linkToAdd,
-		})) }
-		await Promise.all(promises);
+		if (linkToRemove) {
+			await patchDocument(path, {
+				field: 'externalLinks',
+				operator: 'pull',
+				value: { type: linkToRemove.type },
+			});
+		}
+		if (linkToAdd) {
+			await patchDocument(path, {
+				field: 'externalLinks',
+				operator: 'addToSet',
+				value: linkToAdd,
+			});
+		}
+
+		// respond
 		res.send();
 	} catch(err) {
 		next(err);
@@ -335,8 +367,8 @@ router.post('/ideas', keycloak.protect(), fetchUserId, upload.fields([
 	try {
 
 		let content = _getFromReqBody<string>("content", req);
-		const cover: Express.Multer.File = req.files["cover"]?.pop();
-		const images: Express.Multer.File[] = req.files["images"];
+		const cover: Express.Multer.File|undefined = req.files["cover"]?.pop();
+		const images: Express.Multer.File[]|undefined = req.files["images"];
 
 		images?.forEach((image) => {
 			content = content.replace(
