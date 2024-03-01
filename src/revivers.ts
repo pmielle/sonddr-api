@@ -2,33 +2,38 @@ import { DbDiscussion, DbMessage, User, DbUser, Discussion, Doc, Message } from 
 import { getDocuments } from "./database.js";
 
 
+// users
+// --------------------------------------------
 export function reviveUser(dbDoc: DbUser, userId: string|undefined): User {
 	return reviveUsers([dbDoc], userId)[0];
 }
 
+// userId is the id of the logged-in user
+// FIXME: https://trello.com/c/FNO4FCva
 export function reviveUsers(dbDocs: DbUser[], userId: string|undefined): User[] {
-
     if (dbDocs.length == 0) { return []; }
-
     // convert dbDocs into docs
     const docs: User[] = dbDocs.map((dbDoc) => {
-        dbDoc["isUser"] = userId === undefined ? undefined : dbDoc.id === userId;
+        dbDoc["isUser"] = userId === undefined 
+		? undefined 
+		: dbDoc.id === userId;
         return dbDoc as any;
     });
-
     // return
     return docs;
-
 }
 
+
+// messages
+// --------------------------------------------
 export async function reviveMessage(dbDoc: DbMessage, userId: string|undefined): Promise<Message> {
     return (await reviveMessages([dbDoc], userId))[0];
 }
 
+// userId is the id of the logged-in user
+// FIXME: https://trello.com/c/FNO4FCva
 export async function reviveMessages(dbDocs: DbMessage[], userId: string|undefined): Promise<Message[]> {
-
     if (dbDocs.length == 0) { return []; }
-
     // get users
     let usersToGet = _getUnique(dbDocs, "authorId");
     const users = await getDocuments<DbUser>(
@@ -36,27 +41,25 @@ export async function reviveMessages(dbDocs: DbMessage[], userId: string|undefin
         undefined, 
         {field: "id", operator: "in", value: usersToGet}
     ).then(dbDocs => reviveUsers(dbDocs, userId));
-
     // convert dbDocs into docs
     const docs: Message[] = dbDocs.map((dbDoc) => {
         const {authorId, ...data} = dbDoc;
         data["author"] = users.find(u => u.id === authorId);
         return data as any;
     });
-
     // return
     return docs;
-
 }
 
+
+// discussions
+// --------------------------------------------
 export async function reviveDiscussion(dbDoc: DbDiscussion): Promise<Discussion> {
     return (await reviveDiscussions([dbDoc]))[0];
 }
 
 export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discussion[]> {
-
     if (dbDocs.length == 0) { return []; }
-
     // get lastMessages
     const messagesToGet = _getUnique(dbDocs, "lastMessageId");
     let messageDocs: DbMessage[] = [];
@@ -67,7 +70,6 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
             {field: "id", operator: "in", value: messagesToGet}
         );
     }
-
     // get users (userIds + lastMessages authorIds)
     let usersToGet = _getUniqueInArray(dbDocs, "userIds");
     usersToGet.concat(_getUnique(messageDocs, "authorId"));
@@ -76,7 +78,6 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
         undefined, 
         {field: "id", operator: "in", value: usersToGet}
     ).then(dbDocs => reviveUsers(dbDocs, undefined));
-
     // convert dbDocs into docs
     const messages: Message[] = messageDocs.map((dbDoc) => {
         const {authorId, ...data} = dbDoc;
@@ -89,7 +90,6 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
         data["lastMessage"] = messages.find(m => m.id === lastMessageId);
         return data as any // typescript?? 
     });
-
     // return
     return docs;
 }
