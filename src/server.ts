@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, Response } from "express";
-import { NotFoundError } from "./types.js";
-import { Filter, Patch, deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
+import { NotFoundError, Filter, Patch } from "./types.js";
+import { deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
 import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, Vote, makeCheerId, makeVoteId, ping_str, delete_str, DbUser } from "sonddr-shared";
 import session from "express-session";
@@ -507,7 +507,7 @@ router.get('/ideas', keycloak.protect(), fetchUserId, async (req, res, next) => 
 			data["author"] = authors.find(u => u.id === authorId);
 			data["goals"] = goals.filter(g => goalIds.includes(g.id));
 			data["userHasCheered"] = cheers.find(c => c.ideaId === dbDoc.id) ? true : false;
-			return data as any // typescript?? 
+			return data as any;
 		});
 		res.json(docs);
 	} catch (err) {
@@ -552,7 +552,7 @@ router.get('/comments', keycloak.protect(), fetchUserId, async (req, res, next) 
 			data["author"] = authors.find(u => u.id === authorId);
 			const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
 			data["userVote"] = vote ? vote.value : undefined;
-			return data as any // typescript?? 
+			return data as any;
 		});
 		res.json(docs);
 	} catch (err) {

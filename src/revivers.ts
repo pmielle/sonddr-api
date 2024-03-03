@@ -88,7 +88,7 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
         const {userIds, lastMessageId, ...data} = dbDoc;
         data["users"] = users.filter(u => userIds.includes(u.id));
         data["lastMessage"] = messages.find(m => m.id === lastMessageId);
-        return data as any // typescript?? 
+        return data as any;
     });
     // return
     return docs;
