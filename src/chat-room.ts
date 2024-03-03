@@ -1,8 +1,9 @@
-import { Subscription, map, pipe, filter as rxFilter } from "rxjs";
-import { getDocuments } from "./database.js";
-import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
-import { reviveMessages } from "./revivers.js";
 import { WebSocket } from "ws";
+import { Subscription, filter as rxFilter } from "rxjs";
+
+import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
+import { getDocuments } from "./database.js";
+import { reviveMessages } from "./revivers.js";
 import { messagesChanges$ } from "./triggers.js";
 
 
@@ -18,7 +19,7 @@ export class ChatRoomManager {
 			room = this.rooms.get(discussionId);
 			room.join(userId, socket);
 		} else {
-			room = new ChatRoom(discussionId, userId, socket);  // constructor calls join()
+			room = new ChatRoom(discussionId, userId, socket);  // no need to join the room after, it is done in init()
 			this.rooms.set(discussionId, room);
 		}
 		return room;
@@ -33,7 +34,6 @@ export class ChatRoomManager {
 	}
 
 }
-
 
 export class ChatRoom {
 
