@@ -2,7 +2,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { NotFoundError, Filter, Patch } from "./types.js";
 import { deleteDocument, getDocument, getDocuments, makeMongoId, patchDocument, postDocument, putDocument } from "./database.js";
 import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, Vote, makeCheerId, makeVoteId, ping_str, delete_str, DbUser } from "sonddr-shared";
+import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, Vote, makeCheerId, makeVoteId, ping_str, delete_str, DbUser, Change, Discussion, User } from "sonddr-shared";
 import session from "express-session";
 import KeycloakConnect from "keycloak-connect";
 import { SSE } from "./sse.js";
@@ -607,7 +607,7 @@ router.get('/discussions', async (req, res, next) => {
 		sse.send(docs);
 
 		const changesSub = discussionsChanges$.pipe(
-			rxFilter(change => change.payload?.users.map(u => u.id).includes(userId)),
+			rxFilter(change => _getUsersOfDiscussionChange(change).map(u => u.id).includes(userId)),
 		).subscribe(change => sse.send(change));
 
 		// heartbeat to keep the connection alive
@@ -641,7 +641,7 @@ router.get('/notifications', async (req, res, next) => {
 		sse.send(docs);
 
 		const changesSub = notificationsChanges$.pipe(
-			rxFilter(change => change.payload?.toIds.includes(userId)),
+			rxFilter(change => _getToIdsOfNotificationChange(change).includes(userId)),
 		).subscribe(change => sse.send(change));
 
 		// heartbeat to keep the connection alive
@@ -757,6 +757,18 @@ server.listen(port, () => {
 
 // private
 // ----------------------------------------------
+function _getUsersOfDiscussionChange(change: Change<Discussion>): User[] {
+	const users = change.docBefore?.users || change.docAfter?.users;
+	if (! users) { throw new Error("Failed to find users of change"); }
+	return users;
+}
+
+function _getToIdsOfNotificationChange(change: Change<Notification>): string[] {
+	const toIds = change.docBefore?.toIds || change.docAfter?.toIds;
+	if (! toIds) { throw new Error("Failed to find toIds of change"); }
+	return toIds;
+}
+
 function _fixImageSources(content: string) {
 	return content.replaceAll(/<img src="(.+?)">/g, `<img src="${basePath}/${multerPath}/$1">`);
 }

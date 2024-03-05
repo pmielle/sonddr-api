@@ -86,20 +86,34 @@ export class ChatRoom {
 
 	_listenToDatabase() {
 		this.databaseSub = messagesChanges$.pipe(
-			rxFilter(change => change.payload.discussionId === this.discussionId),
+			rxFilter(change => this._getDiscussionIdOfChange(change) === this.discussionId),
 		).subscribe(change => {
 			for (const [userId, ws] of this.clients) {
 				// finish revival of user object
-				change.payload.author.isUser = change.payload.author.id === userId
+				const isUser = this._getAuthorIdOfChange(change) === userId
+				if (change.docBefore) { change.docBefore.author.isUser = isUser }
+				if (change.docAfter) { change.docAfter.author.isUser = isUser }
 				// a placeholder is inserted client side when a message is send
 				// change the type to "update" for this specific client to replace the placeholder
-				const changeToSend = (change.type === "insert" && change.payload.author.id === userId)
+				const changeToSend = (isUser && change.type === "insert")
 					? { ...change, type: "update", docId: placeholder_id } as Change<Message>
 					: change;
 				// actually send
 				this._send(changeToSend, ws);
 			}
 		});
+	}
+
+	_getDiscussionIdOfChange(change: Change<Message>): string {
+		const discussionId = change.docBefore?.discussionId || change.docAfter?.discussionId;
+		if (! discussionId) { throw new Error("Failed to find discussionId of change"); }
+		return discussionId;
+	}
+
+	_getAuthorIdOfChange(change: Change<Message>): string {
+		const authorId = change.docBefore?.author.id || change.docAfter?.author.id;
+		if (! authorId) { throw new Error("Failed to find authorId of change"); }
+		return authorId;
 	}
 
 }

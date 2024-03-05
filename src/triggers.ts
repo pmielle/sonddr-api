@@ -2,7 +2,7 @@ import { Subject, filter, switchMap } from "rxjs";
 
 import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, Cheer, Idea, DbUser, } from "sonddr-shared";
 import { deleteDocuments, getDocument, postDocument, watchCollection } from "./database.js";
-import { reviveMessage, reviveDiscussion, reviveUser, } from "./revivers.js";
+import { reviveMessage, reviveDiscussion, reviveUser, reviveChange } from "./revivers.js";
 import { deleteUpload } from "./uploads.js";
 
 
@@ -18,10 +18,7 @@ watchCollection<Notification>("notifications").subscribe(notificationsChanges$);
 // change stream
 export const discussionsChanges$: Subject<Change<Discussion>> = new Subject();
 watchCollection<DbDiscussion>("discussions").pipe(
-	switchMap(async change => {
-		let revivedPayload = await reviveDiscussion(change.payload);
-		return { ...change, payload: revivedPayload };
-	})
+	switchMap(async change => await reviveChange(change, reviveDiscussion))
 ).subscribe(discussionsChanges$);
 
 
@@ -30,10 +27,7 @@ watchCollection<DbDiscussion>("discussions").pipe(
 // change stream
 export const messagesChanges$: Subject<Change<Message>> = new Subject();
 watchCollection<DbMessage>("messages").pipe(
-	switchMap(async change => {
-		let revivedPayload = await reviveMessage(change.payload, undefined);
-		return { ...change, payload: revivedPayload };
-	})
+	switchMap(async change => await reviveChange(change, reviveMessage))
 ).subscribe(messagesChanges$);
 
 
@@ -58,7 +52,7 @@ watchCollection<Idea>("ideas").pipe(
 ).subscribe(async (change) => {
 	const ideaId = change.docId;
 	// delete its images
-	const idea = change.payload;
+	const idea = change.docBefore;
 	if (idea.cover) { deleteUpload(idea.cover); }
 	for (const path of idea.content.matchAll(/<img src="(?<path>\w+)">/g)) {
 		deleteUpload(path.groups["path"]);
@@ -74,7 +68,7 @@ watchCollection<Idea>("ideas").pipe(
 watchCollection<Cheer>("cheers").pipe(
 	filter(change => change.type === "insert")
 ).subscribe(async change => {
-	const cheer = change.payload;
+	const cheer = change.docAfter;
 	const [cheerAuthor, idea] = await Promise.all([
 		getDocument<DbUser>(`users/${cheer.authorId}`).then(dbDocs => reviveUser(dbDocs, undefined)),
 		getDocument<DbIdea>(`ideas/${cheer.ideaId}`),
@@ -96,7 +90,7 @@ watchCollection<Cheer>("cheers").pipe(
 watchCollection<DbComment>("comments").pipe(
 	filter(change => change.type === "insert")
 ).subscribe(async change => {
-	const dbComment = change.payload;
+	const dbComment = change.docAfter;
 	const [commentAuthor, idea] = await Promise.all([
 		getDocument<DbUser>(`users/${dbComment.authorId}`).then(dbDoc => reviveUser(dbDoc, undefined)),
 		getDocument<DbIdea>(`ideas/${dbComment.ideaId}`),

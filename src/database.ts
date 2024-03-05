@@ -28,48 +28,56 @@ export function watchCollection<T>(path: string, filter?: Filter | Filter[]): Ob
 
 				case "delete": {
 					const dbDoc = change.fullDocumentBeforeChange;
-					const payload = _convertDbDocToDoc(dbDoc);
-					const docId = change.documentKey._id.toString();
+					const docBefore = _convertDbDocToDoc(dbDoc);
+					const docId = docBefore.id;
 					subscriber.next({
 						type: "delete",
 						docId: docId,
-						payload: payload as T,
+						docBefore: docBefore as T,
+						docAfter: undefined,
 					});
 					break;
 				}
 
 				case "insert": {
 					const dbDoc = change.fullDocument;
-					const payload = _convertDbDocToDoc(dbDoc);
-					const docId = payload.id;
+					const docAfter = _convertDbDocToDoc(dbDoc);
+					const docId = docAfter.id;
 					subscriber.next({
 						type: "insert",
 						docId: docId,
-						payload: payload as T,
+						docBefore: undefined,
+						docAfter: docAfter as T,
 					});
 					break;
 				}
 
 				case "update": {
-					const dbDoc = change.fullDocument;
-					const payload = _convertDbDocToDoc(dbDoc);
-					const docId = payload.id;
+					const dbDocBefore = change.fullDocumentBeforeChange;
+					const dbDocAfter = change.fullDocument;
+					const docBefore = _convertDbDocToDoc(dbDocBefore);
+					const docAfter = _convertDbDocToDoc(dbDocAfter);
+					const docId = docAfter.id;
 					subscriber.next({
 						type: "update",
 						docId: docId,
-						payload: payload as T,
+						docAfter: docAfter as T,
+						docBefore: docBefore as T,
 					});
 					break;
 				}
 
 				case "replace": {
-					const dbDoc = change.fullDocument;
-					const payload = _convertDbDocToDoc(dbDoc);
-					const docId = payload.id;
+					const dbDocBefore = change.fullDocumentBeforeChange;
+					const dbDocAfter = change.fullDocument;
+					const docBefore = _convertDbDocToDoc(dbDocBefore);
+					const docAfter = _convertDbDocToDoc(dbDocAfter);
+					const docId = docAfter.id;
 					subscriber.next({
 						type: "update",
 						docId: docId,
-						payload: payload as T,
+						docAfter: docAfter as T,
+						docBefore: docBefore as T,
 					});
 					break;
 				}
