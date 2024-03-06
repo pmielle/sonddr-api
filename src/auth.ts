@@ -39,11 +39,12 @@ export class Auth {
 		incomingMessage["userId"] = makeMongoId(profile["sub"]).toString();
 	}
 
-	async authenticateRequest(req: Request): Promise<void> {
+	async authenticateRequest(req: Request, res: Response, next: NextFunction): Promise<void> {
 		const url = new URL(req.url, `http://${req.headers.host}`);
 		const token = url.searchParams.get("token");
 		let profile = await this.keycloak.grantManager.userInfo(token);
 		req["userId"] = makeMongoId(profile["sub"]).toString();
+		next();
 	}
 
 	// private

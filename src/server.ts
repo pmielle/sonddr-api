@@ -1,19 +1,24 @@
 import express, { NextFunction, Request, Response } from "express";
-import { NotFoundError, Filter } from "./types.js";
-import { deleteDocument, getDocument, getDocuments, patchDocument, postDocument, putDocument } from "./database.js";
-import chalk from "chalk";
-import { Cheer, DbComment, Comment, DbDiscussion, DbIdea, Goal, Idea, Notification, Vote, makeCheerId, makeVoteId, ping_str, delete_str, DbUser, Change, Discussion, User } from "sonddr-shared";
 import session from "express-session";
-import { SSE } from "./sse.js";
-import { reviveDiscussion, reviveDiscussions, reviveUser, reviveUsers } from "./revivers.js";
-import { discussionsChanges$, notificationsChanges$ } from "./triggers.js";
-import { filter as rxFilter } from "rxjs";
-import { ChatRoom, ChatRoomManager } from "./chat-room.js";
+import chalk from "chalk";
 import { createServer, IncomingMessage } from "http";
 import { WebSocketServer } from "ws";
+import { delete_str, } from "sonddr-shared";
+import { NotFoundError, } from "./types.js";
+import { basePath, wsBasePath } from "./routes.js";
+import { patchDocument, postDocument, } from "./database.js";
+import { ChatRoom, ChatRoomManager } from "./chat-room.js";
 import { multerPath, upload } from "./uploads.js";
 import { Auth } from "./auth.js";
+import { _getReqPath } from "./handlers.js";
 import { deleteIdea, getIdea, getIdeas, patchIdea, postIdea } from "./handlers/ideas.js";
+import { getGoal, getGoals } from "./handlers/goals.js";
+import { getUser, getUsers, patchUser, putUser } from "./handlers/users.js";
+import { deleteVote, putVote } from "./handlers/votes.js";
+import { deleteCheer, getCheer, putCheer } from "./handlers/cheers.js";
+import { deleteComment, getComment, getComments, postComment } from "./handlers/comments.js";
+import { getDiscussion, getDiscussions, patchDiscussion, postDiscussion } from "./handlers/discussions.js";
+import { getNotifications, patchNotification } from "./handlers/notifications.js";
 
 const port = 3000;
 const app = express();
@@ -46,21 +51,48 @@ const router = express.Router();
 
 router.use("/uploads", express.static(multerPath));
 
-router.get('/ideas', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		await getIdeas(req, res, next);
-	} catch (err) {
-		next(err);
-	}
-});
+// goals
+router.get('/goals',
+	auth.keycloak.protect(),
+	async (req, res, next) => {
+		try {
+			await getGoals(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-router.get('/ideas/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		await getIdea(req, res, next);
-	} catch (err) {
-		next(err);
-	}
-});
+router.get('/goals/:id',
+	auth.keycloak.protect(),
+	async (req, res, next) => {
+		try {
+			await getGoal(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
+
+router.get('/ideas',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await getIdeas(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
+
+// ideas
+router.get('/ideas/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId, async (req, res, next) => {
+		try {
+			await getIdea(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
 router.delete('/ideas/:id',
 	auth.keycloak.protect(),
@@ -97,416 +129,217 @@ router.post('/ideas',
 		}
 	});
 
-router.patch(`/users/:id`, auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		// only the user is allowed to edits its external links
-		const path = _getReqPath(req);
-		const userId = req.params["id"];
-		if (!userId === req["userId"]) { throw new Error(`Unauthorized`); }
-		// find links to remove or to add
-		const linkToRemove = req.body["removeExternalLink"];
-		const linkToAdd = req.body["addExternalLink"];
-		if (!linkToRemove && !linkToAdd) { throw new Error(`Both remove- and addExternalLink are missing`); }
-		const promises: Promise<void>[] = [];
-		if (linkToRemove) {
-			promises.push(patchDocument(path, {
-				field: 'externalLinks',
-				operator: 'pull',
-				value: { type: linkToRemove.type },
-			}))
-		}
-		if (linkToAdd) {
-			promises.push(patchDocument(path, {
-				field: 'externalLinks',
-				operator: 'addToSet',
-				value: linkToAdd,
-			}))
-		}
-		await Promise.all(promises);
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.delete(`/votes/:id`, auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const doc = await getDocument<Vote>(_getReqPath(req));
-		if (doc.authorId !== req["userId"]) {
-			throw new Error(`${req["userId"]} is not the author of the vote`);
-		}
-		// get previous value and patch the rating of the comment
-		const previousValue = await getDocument<Vote>(_getReqPath(req))
-			.then(v => v.value)
-			.catch(err => {
-				if (!(err instanceof NotFoundError)) { throw err; }
-				return 0;
-			});
-		await patchDocument(`comments/${doc.commentId}`, { field: "rating", operator: "inc", value: -1 * previousValue });
-		// delete the vote
-		await deleteDocument(_getReqPath(req));
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.put(`/votes/:id`, auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const value = _getFromReqBody<number>("value", req);
-		if (![1, -1].includes(value)) { throw new Error(`Value must be 1 or -1`); }
-		const commentId = _getFromReqBody<string>("commentId", req);
-		const userId = req["userId"];
-		const voteId = makeVoteId(commentId, userId);
-		// get previous vote value to determine the new comment rating
-		const previousValue = await getDocument<Vote>(_getReqPath(req))
-			.then(v => v.value)
-			.catch(err => {
-				if (!(err instanceof NotFoundError)) { throw err; }
-				return 0;
-			});
-		const valueDiff = value - previousValue;
-		if (valueDiff !== 0) {
-			await patchDocument(
-				`comments/${commentId}`,
-				{ field: "rating", operator: "inc", value: valueDiff },
-			);
-		}
-		// put the vote, allow upsert
-		await putDocument(_getReqPath(req), {
-			id: voteId,
-			authorId: userId,
-			commentId: commentId,
-			value: value,
-		}, true);
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.delete(`/cheers/:id`, auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const doc = await getDocument<Cheer>(_getReqPath(req));
-		if (doc.authorId !== req["userId"]) {
-			throw new Error(`${req["userId"]} is not the author of the cheer`);
-		}
-		await patchDocument(`ideas/${doc.ideaId}`, { field: "supports", operator: "inc", value: -1 });
-		await deleteDocument(_getReqPath(req));
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.get('/cheers/:id', auth.keycloak.protect(), async (req, res, next) => {
-	try {
-		const doc = await getDocument<Cheer>(_getReqPath(req));
-		res.json(doc);
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.put('/cheers/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const ideaId = _getFromReqBody("ideaId", req);
-		const userId = req["userId"];
-		const id = makeCheerId(ideaId as string, userId);
-		const payload = {
-			id: id,
-			ideaId: ideaId,
-			authorId: userId,
-		};
-		await putDocument(_getReqPath(req), payload);
-		await patchDocument(`ideas/${ideaId}`, { field: "supports", operator: "inc", value: 1 });
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.get('/comments/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const dbDoc = await getDocument<DbComment>(_getReqPath(req));
-		const user = await getDocument<DbUser>(`users/${dbDoc.authorId}`).then(dbDoc => reviveUser(dbDoc, req["userId"]));
-		const { authorId, ...doc } = dbDoc;
-		doc["author"] = user;
-
+// users
+router.patch(`/users/:id`,
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
 		try {
-			const voteId = makeVoteId(dbDoc.id, req["userId"]);
-			const vote = await getDocument<Vote>(`votes/${voteId}`);
-			doc["userVote"] = vote.value;
-		} catch (err) { if (!(err instanceof NotFoundError)) { throw err; } }
-
-		res.json(doc);
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.post('/comments', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const payload = {
-			ideaId: _getFromReqBody("ideaId", req),
-			content: _getFromReqBody("content", req),
-			authorId: req["userId"],
-			date: new Date(),
-			rating: 0,
-		};
-		const insertedId = await postDocument(_getReqPath(req), payload);
-		res.json({ insertedId: insertedId });
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.post('/discussions', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const fromUserId = req["userId"];
-		const toUserId = _getFromReqBody("toUserId", req);
-		const firstMessageContent = _getFromReqBody("firstMessageContent", req);
-		const discussionPayload = {
-			userIds: [fromUserId, toUserId],
-			readByIds: [],
-		};
-		const discussionId = await postDocument(_getReqPath(req), discussionPayload);
-		const firstMessagePayload = {
-			discussionId: discussionId,
-			authorId: fromUserId,
-			content: firstMessageContent,
-			date: new Date(),
-			deleted: false,
-		};
-		const firstMessageId = await postDocument('messages', firstMessagePayload);
-		await patchDocument(
-			`discussions/${discussionId}`,
-			[
-				{ field: "lastMessageId", operator: "set", value: firstMessageId },
-				{ field: "readByIds", operator: "set", value: [fromUserId] },
-				{ field: "date", operator: "set", value: firstMessagePayload.date },
-			]
-		);
-		res.json({ insertedId: discussionId });
-	} catch (err) {
-		next(err);
-	};
-});
-
-router.get('/users', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const regex = req.query.regex;
-		const filters: Filter[] = [];
-		if (regex) {
-			filters.push({ field: "name", operator: "regex", value: regex });
+			await patchUser(req, res, next);
+		} catch (err) {
+			next(err);
 		}
-		const users = await getDocuments<DbUser>(
-			_getReqPath(req),
-			{ field: 'name', desc: false },
-			filters
-		).then(dbDocs => reviveUsers(dbDocs, req["userId"]));
-		res.json(users);
-	} catch (err) {
-		next(err);
-	}
-});
+	});
 
-router.delete('/comments/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const comment = await getDocument<DbComment>(_getReqPath(req));
-		if (comment.authorId !== req["userId"]) { throw new Error("Unauthorized"); }
-		await deleteDocument(_getReqPath(req));
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
+router.get('/users',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await getUsers(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-router.put('/users/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const payload = {
-			id: req["userId"],
-			name: _getFromReqBody("name", req),
-			date: new Date(),
-			externalLinks: [],
-			bio: "",
+router.put('/users/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await putUser(req, res, next);
+		} catch (err) {
+			next(err);
 		};
-		await putDocument(_getReqPath(req), payload);
-		res.send();
-	} catch (err) {
-		next(err);
-	};
-});
+	});
 
-router.get('/goals', auth.keycloak.protect(), async (req, res, next) => {
-	try {
-		const docs = await getDocuments<Goal>(_getReqPath(req), { field: "order", desc: false });
-		res.json(docs);
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.get('/goals/:id', auth.keycloak.protect(), async (req, res, next) => {
-	try {
-		const doc = await getDocument<Goal>(_getReqPath(req));
-		res.json(doc);
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.get('/users/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const doc = await getDocument<DbUser>(_getReqPath(req)).then(dbDoc => reviveUser(dbDoc, req["userId"]));
-		res.json(doc);
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.get('/comments', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		const order = req.query.order || "date";
-		const ideaId = req.query.ideaId;
-		const authorId = req.query.authorId;
-		const filters: Filter[] = [];
-		if (ideaId) {
-			filters.push({ field: "ideaId", operator: "eq", value: ideaId });
+router.get('/users/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await getUser(req, res, next);
+		} catch (err) {
+			next(err);
 		}
-		if (authorId) {
-			filters.push({ field: "authorId", operator: "eq", value: authorId });
+	});
+
+// votes
+router.delete(`/votes/:id`,
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await deleteVote(req, res, next);
+		} catch (err) {
+			next(err);
 		}
-		const dbDocs = await getDocuments<DbComment>(
-			_getReqPath(req),
-			{ field: order as string, desc: true },
-			filters
-		);
-		if (dbDocs.length == 0) {
-			res.json([]);
-			return;
+	});
+
+router.put(`/votes/:id`,
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await putVote(req, res, next);
+		} catch (err) {
+			next(err);
 		}
-		const authorsToGet = _getUnique(dbDocs, "authorId");
-		const votesToGet = _getUnique(dbDocs, "id");
-		const [authors, votes] = await Promise.all([
-			getDocuments<DbUser>("users", undefined, { field: "id", operator: "in", value: authorsToGet })
-				.then(dbDocs => reviveUsers(dbDocs, req["userId"])),
-			getDocuments<Vote>("votes", undefined, [
-				{ field: "commentId", operator: "in", value: votesToGet },
-				{ field: "authorId", operator: "eq", value: req["userId"] },
-			]),
-		]);
+	});
 
-		const docs: Comment[] = dbDocs.map((dbDoc) => {
-			const { authorId, ...data } = dbDoc;
-			data["author"] = authors.find(u => u.id === authorId);
-			const vote = votes.find(v => v.commentId === dbDoc.id);  // might be undefined
-			data["userVote"] = vote ? vote.value : undefined;
-			return data as any;
-		});
-		res.json(docs);
-	} catch (err) {
-		next(err);
-	}
-});
+// cheers
+router.delete(`/cheers/:id`,
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await deleteCheer(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-router.patch('/discussions/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		await patchDocument(_getReqPath(req), { field: 'readByIds', operator: 'addToSet', value: req["userId"] });
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
+router.get('/cheers/:id',
+	auth.keycloak.protect(),
+	async (req, res, next) => {
+		try {
+			await getCheer(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-router.patch('/notifications/:id', auth.keycloak.protect(), auth.fetchUserId, async (req, res, next) => {
-	try {
-		await patchDocument(_getReqPath(req), { field: 'readByIds', operator: 'addToSet', value: req["userId"] });
-		res.send();
-	} catch (err) {
-		next(err);
-	}
-});
+router.put('/cheers/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await putCheer(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-router.get('/discussions/:id', auth.keycloak.protect(), async (req, res, next) => {
-	try {
-		const doc = await getDocument<DbDiscussion>(_getReqPath(req))
-			.then(dbDoc => reviveDiscussion(dbDoc));
-		res.json(doc);
-	} catch (err) {
-		next(err);
-	}
-});
+// comments
+router.get('/comments/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await getComment(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-router.get('/discussions', async (req, res, next) => {
-	try {
+router.post('/comments',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await postComment(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-		await auth.authenticateRequest(req);
-		const userId = req["userId"];
+router.delete('/comments/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await deleteComment(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-		const filter: Filter = { field: "userIds", operator: "in", value: [userId] };
+router.get('/comments',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await getComments(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-		const sse = new SSE(res);
+// discussions
+router.post('/discussions',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await postDiscussion(req, res, next);
+		} catch (err) {
+			next(err);
+		};
+	});
 
-		const docs = await getDocuments<DbDiscussion>(
-			_getReqPath(req),
-			{ field: "date", desc: true },
-			{ ...filter },  // otherwise can't be reused in watch()
-		).then(dbDocs => reviveDiscussions(dbDocs));
+router.patch('/discussions/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await patchDiscussion(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-		sse.send(docs);
+router.get('/discussions/:id',
+	auth.keycloak.protect(),
+	async (req, res, next) => {
+		try {
+			await getDiscussion(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-		const changesSub = discussionsChanges$.pipe(
-			rxFilter(change => _getUsersOfDiscussionChange(change).map(u => u.id).includes(userId)),
-		).subscribe(change => sse.send(change));
+router.get('/discussions',
+	auth.authenticateRequest,
+	async (req, res, next) => {
+		try {
+			await getDiscussions(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-		// heartbeat to keep the connection alive
-		// otherwise nginx timeouts after 60s
-		const pingId = setInterval(() => sse.send(ping_str), 30000);
 
-		req.on("close", () => {
-			clearInterval(pingId);
-			changesSub.unsubscribe()
-		});
+// notifications
+router.patch('/notifications/:id',
+	auth.keycloak.protect(),
+	auth.fetchUserId,
+	async (req, res, next) => {
+		try {
+			await patchNotification(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
-	} catch (err) {
-		next(err);
-	}
-});
-
-router.get('/notifications', async (req, res, next) => {
-	try {
-
-		await auth.authenticateRequest(req);
-		const userId = req["userId"];
-
-		const sse = new SSE(res);
-
-		const docs = await getDocuments<Notification>(
-			_getReqPath(req),
-			{ field: "date", desc: true },
-			{ field: "toIds", operator: "in", value: [userId] },
-		);
-
-		sse.send(docs);
-
-		const changesSub = notificationsChanges$.pipe(
-			rxFilter(change => _getToIdsOfNotificationChange(change).includes(userId)),
-		).subscribe(change => sse.send(change));
-
-		// heartbeat to keep the connection alive
-		// otherwise nginx timeouts after 60s
-		const pingId = setInterval(() => sse.send(ping_str), 30000);
-
-		req.on("close", () => {
-			clearInterval(pingId);
-			changesSub.unsubscribe()
-		});
-
-	} catch (err) {
-		next(err);
-	}
-});
+router.get('/notifications',
+	auth.authenticateRequest,
+	async (req, res, next) => {
+		try {
+			await getNotifications(req, res, next);
+		} catch (err) {
+			next(err);
+		}
+	});
 
 app.use(basePath, router);
 
@@ -607,24 +440,6 @@ server.listen(port, () => {
 
 // private
 // ----------------------------------------------
-function _getUsersOfDiscussionChange(change: Change<Discussion>): User[] {
-	const users = change.docBefore?.users || change.docAfter?.users;
-	if (!users) { throw new Error("Failed to find users of change"); }
-	return users;
-}
-
-function _getToIdsOfNotificationChange(change: Change<Notification>): string[] {
-	const toIds = change.docBefore?.toIds || change.docAfter?.toIds;
-	if (!toIds) { throw new Error("Failed to find toIds of change"); }
-	return toIds;
-}
-
-function _getFromReqQuery<T>(key: string, req: Request): T {
-	const value = req.query[key];
-	if (value === undefined) { throw new Error(`${key} not found in request query parameters`); }
-	return value as T;
-}
-
 function _getFromIncomingMessageQuery<T>(key: string, incomingMessage: IncomingMessage): T {
 	const url = new URL(incomingMessage.url, `http://${incomingMessage.headers.host}`);
 	const value = url.searchParams.get(key);

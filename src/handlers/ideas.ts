@@ -45,7 +45,6 @@ export async function getIdeas(req: Request, res: Response, next: NextFunction) 
 			{ field: "authorId", operator: "eq", value: req["userId"] },
 		]),
 	]);
-
 	const docs: Idea[] = dbDocs.map((dbDoc) => {
 		const { authorId, goalIds, ...data } = dbDoc;
 		data["author"] = authors.find(u => u.id === authorId);
