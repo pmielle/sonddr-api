@@ -1,6 +1,6 @@
 import { Subject, filter, switchMap } from "rxjs";
 
-import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, Cheer, Idea, DbUser, } from "sonddr-shared";
+import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage, DbComment, DbIdea, Idea, DbUser, } from "sonddr-shared";
 import { deleteDocuments, getDocument, postDocument, watchCollection } from "./database.js";
 import { reviveMessage, reviveDiscussion, reviveUser, reviveChange } from "./revivers.js";
 import { deleteUpload } from "./uploads.js";
@@ -59,28 +59,6 @@ watchCollection<Idea>("ideas").pipe(
 	}
 	// delete its comments
 	deleteDocuments(`comments`, { field: "ideaId", operator: "eq", value: ideaId });
-});
-
-// cheers
-// --------------------------------------------
-// when a cheer inserted, notify the idea author
-// (except if they cheer for their own idea)
-watchCollection<Cheer>("cheers").pipe(
-	filter(change => change.type === "insert")
-).subscribe(async change => {
-	const cheer = change.docAfter;
-	const [cheerAuthor, idea] = await Promise.all([
-		getDocument<DbUser>(`users/${cheer.authorId}`).then(dbDocs => reviveUser(dbDocs, undefined)),
-		getDocument<DbIdea>(`ideas/${cheer.ideaId}`),
-	]);
-	if (cheerAuthor.id === idea.authorId) { return; }  // do not notify
-	const notificationPayload = {
-		toIds: [idea.authorId],
-		date: new Date(),
-		readByIds: [],
-		content: `${cheerAuthor.name} cheers for ${idea.title}`,
-	};
-	postDocument(`notifications`, notificationPayload);
 });
 
 // comments

@@ -15,7 +15,6 @@ export async function putCheer(req: Request, res: Response, next: NextFunction)Â
 		authorId: userId,
 	};
 	await putDocument(_getReqPath(req), payload);
-	await patchDocument(`ideas/${ideaId}`, { field: "supports", operator: "inc", value: 1 });
 	res.send();
 }
 
@@ -29,7 +28,6 @@ export async function deleteCheer(req: Request, res: Response, next: NextFunctio
 	if (doc.authorId !== req["userId"]) {
 		throw new Error(`${req["userId"]} is not the author of the cheer`);
 	}
-	await patchDocument(`ideas/${doc.ideaId}`, { field: "supports", operator: "inc", value: -1 });
 	await deleteDocument(_getReqPath(req));
 	res.send();
 }
