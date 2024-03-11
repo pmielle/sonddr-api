@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 
-import { DbComment, DbUser, Vote, makeVoteId } from "sonddr-shared";
-import { deleteDocument, getDocument, getDocuments, postDocument } from "../database";
-import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers";
-import { reviveUser, reviveUsers } from "../revivers";
-import { Filter, NotFoundError } from "../types";
+import { Comment, DbComment, DbUser, Vote, makeVoteId } from "sonddr-shared";
+import { deleteDocument, getDocument, getDocuments, postDocument } from "../database.js";
+import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers.js";
+import { reviveUser, reviveUsers } from "../revivers.js";
+import { Filter, NotFoundError } from "../types.js";
 
 
 export async function postComment(req: Request, res: Response, next: NextFunction) {

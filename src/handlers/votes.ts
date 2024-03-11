@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
-import { deleteDocument, getDocument, patchDocument, putDocument } from "../database";
+import { deleteDocument, getDocument, patchDocument, putDocument } from "../database.js";
 import { Vote, makeVoteId } from "sonddr-shared";
-import { _getFromReqBody, _getReqPath } from "../handlers";
-import { NotFoundError } from "../types";
+import { _getFromReqBody, _getReqPath } from "../handlers.js";
+import { NotFoundError } from "../types.js";
 
 
 export async function putVote(req: Request, res: Response, next: NextFunction) {

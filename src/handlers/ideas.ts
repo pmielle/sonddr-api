@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 
 import { Cheer, DbIdea, DbUser, Goal, Idea, makeCheerId } from "sonddr-shared";
-import { Filter, NotFoundError, Patch } from "../types";
-import { deleteDocument, getDocument, getDocuments, patchDocument, postDocument } from "../database";
-import { _getFromReqBody, _getReqPath, _getUnique, _getUniqueInArray } from "../handlers";
-import { basePath } from "../routes";
-import { multerPath } from "../uploads";
-import { reviveUser, reviveUsers } from "../revivers";
+import { Filter, NotFoundError, Patch } from "../types.js";
+import { deleteDocument, getDocument, getDocuments, patchDocument, postDocument } from "../database.js";
+import { _getFromReqBody, _getReqPath, _getUnique, _getUniqueInArray } from "../handlers.js";
+import { basePath } from "../routes.js";
+import { multerPath } from "../uploads.js";
+import { reviveUser, reviveUsers } from "../revivers.js";
 
 
 export async function getIdeas(req: Request, res: Response, next: NextFunction) {

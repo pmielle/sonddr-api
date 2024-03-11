@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 
 import { Goal } from "sonddr-shared";
-import { getDocument, getDocuments } from "../database";
-import { _getReqPath } from "../handlers";
+import { getDocument, getDocuments } from "../database.js";
+import { _getReqPath } from "../handlers.js";
 
 
 export async function getGoals(req: Request, res: Response, next: NextFunction) {

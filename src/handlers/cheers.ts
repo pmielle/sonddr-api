@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 
 import { Cheer, makeCheerId } from "sonddr-shared";
-import { deleteDocument, getDocument, patchDocument, putDocument } from "../database";
-import { _getFromReqBody, _getReqPath } from "../handlers";
+import { deleteDocument, getDocument, patchDocument, putDocument } from "../database.js";
+import { _getFromReqBody, _getReqPath } from "../handlers.js";
 
 
 export async function putCheer(req: Request, res: Response, next: NextFunction) {

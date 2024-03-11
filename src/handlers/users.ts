@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 
 import { DbUser } from "sonddr-shared";
-import { _getFromReqBody, _getReqPath } from "../handlers";
-import { getDocument, getDocuments, patchDocument, putDocument } from "../database";
-import { Filter } from "../types";
-import { reviveUser, reviveUsers } from "../revivers";
+import { _getFromReqBody, _getReqPath } from "../handlers.js";
+import { getDocument, getDocuments, patchDocument, putDocument } from "../database.js";
+import { Filter } from "../types.js";
+import { reviveUser, reviveUsers } from "../revivers.js";
 
 
 export async function putUser(req: Request, res: Response, next: NextFunction) {

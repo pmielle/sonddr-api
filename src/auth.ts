@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import KeycloakConnect, { Keycloak } from "keycloak-connect";
 import { IncomingMessage } from "http";
 
-import { makeMongoId } from "./database";
+import { makeMongoId } from "./database.js";
 
 
 export class Auth {

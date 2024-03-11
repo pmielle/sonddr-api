@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import { filter as rxFilter } from "rxjs";
 
 import { Change, Notification, ping_str } from "sonddr-shared";
-import { SSE } from "../sse";
-import { getDocuments, patchDocument } from "../database";
-import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers";
-import { notificationsChanges$ } from "../triggers";
+import { SSE } from "../sse.js";
+import { getDocuments, patchDocument } from "../database.js";
+import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers.js";
+import { notificationsChanges$ } from "../triggers.js";
 
 
 export async function getNotifications(req: Request, res: Response, next: NextFunction) {

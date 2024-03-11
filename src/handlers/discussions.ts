@@ -2,12 +2,12 @@ import { Request, Response, NextFunction } from "express";
 import { filter as rxFilter } from "rxjs";
 
 import { Change, DbDiscussion, Discussion, User, ping_str } from "sonddr-shared";
-import { getDocument, getDocuments, patchDocument, postDocument } from "../database";
-import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers";
-import { reviveDiscussion, reviveDiscussions } from "../revivers";
-import { discussionsChanges$ } from "../triggers";
-import { Filter } from "../types";
-import { SSE } from "../sse";
+import { getDocument, getDocuments, patchDocument, postDocument } from "../database.js";
+import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers.js";
+import { reviveDiscussion, reviveDiscussions } from "../revivers.js";
+import { discussionsChanges$ } from "../triggers.js";
+import { Filter } from "../types.js";
+import { SSE } from "../sse.js";
 
 
 export async function getDiscussions(req: Request, res: Response, next: NextFunction) {
