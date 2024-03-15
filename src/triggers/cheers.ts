@@ -9,20 +9,20 @@ watchCollection<Cheer>("cheers").subscribe(async change => {
 		// - notify the idea author
 		// - increment the idea supports
 		const cheer = change.docAfter;
-		notifyAuthor(cheer);
-		incrementSupports(cheer.ideaId, 1);
+		_notifyAuthor(cheer);
+		_incrementSupports(cheer.ideaId, 1);
 	} else if (change.type === "delete") {
 		// upon delete:
 		// - decrement the idea supports
 		const cheer = change.docBefore;
-		incrementSupports(cheer.ideaId, -1);
+		_incrementSupports(cheer.ideaId, -1);
 	}
 });
 
 
 // private
 // --------------------------------------------
-export async function notifyAuthor(cheer: Cheer) {
+async function _notifyAuthor(cheer: Cheer) {
 	const [cheerAuthor, idea] = await Promise.all([
 		getDocument<DbUser>(`users/${cheer.authorId}`).then(dbDocs => reviveUser(dbDocs, undefined)),
 		getDocument<DbIdea>(`ideas/${cheer.ideaId}`),
@@ -37,6 +37,6 @@ export async function notifyAuthor(cheer: Cheer) {
 	postDocument(`notifications`, notificationPayload);
 }
 
-export async function incrementSupports(ideaId: string, value: 1 | -1) {
+async function _incrementSupports(ideaId: string, value: 1 | -1) {
 	patchDocument(`ideas/${ideaId}`, { field: "supports", operator: "inc", value: value });
 }
