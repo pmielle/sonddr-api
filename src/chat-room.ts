@@ -1,8 +1,9 @@
-import { Subscription, map, pipe, filter as rxFilter } from "rxjs";
-import { getDocuments } from "./database.js";
-import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
-import { reviveMessages } from "./revivers.js";
 import { WebSocket } from "ws";
+import { Subscription, filter as rxFilter } from "rxjs";
+
+import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
+import { getDocuments } from "./database.js";
+import { reviveMessages } from "./revivers.js";
 import { messagesChanges$ } from "./triggers.js";
 
 
@@ -18,7 +19,7 @@ export class ChatRoomManager {
 			room = this.rooms.get(discussionId);
 			room.join(userId, socket);
 		} else {
-			room = new ChatRoom(discussionId, userId, socket);  // constructor calls join()
+			room = new ChatRoom(discussionId, userId, socket);  // no need to join the room after, it is done in init()
 			this.rooms.set(discussionId, room);
 		}
 		return room;
@@ -33,7 +34,6 @@ export class ChatRoomManager {
 	}
 
 }
-
 
 export class ChatRoom {
 
@@ -86,20 +86,34 @@ export class ChatRoom {
 
 	_listenToDatabase() {
 		this.databaseSub = messagesChanges$.pipe(
-			rxFilter(change => change.payload.discussionId === this.discussionId),
+			rxFilter(change => this._getDiscussionIdOfChange(change) === this.discussionId),
 		).subscribe(change => {
 			for (const [userId, ws] of this.clients) {
 				// finish revival of user object
-				change.payload.author.isUser = change.payload.author.id === userId
+				const isUser = this._getAuthorIdOfChange(change) === userId
+				if (change.docBefore) { change.docBefore.author.isUser = isUser }
+				if (change.docAfter) { change.docAfter.author.isUser = isUser }
 				// a placeholder is inserted client side when a message is send
 				// change the type to "update" for this specific client to replace the placeholder
-				const changeToSend = (change.type === "insert" && change.payload.author.id === userId)
+				const changeToSend = (isUser && change.type === "insert")
 					? { ...change, type: "update", docId: placeholder_id } as Change<Message>
 					: change;
 				// actually send
 				this._send(changeToSend, ws);
 			}
 		});
+	}
+
+	_getDiscussionIdOfChange(change: Change<Message>): string {
+		const discussionId = change.docBefore?.discussionId || change.docAfter?.discussionId;
+		if (! discussionId) { throw new Error("Failed to find discussionId of change"); }
+		return discussionId;
+	}
+
+	_getAuthorIdOfChange(change: Change<Message>): string {
+		const authorId = change.docBefore?.author.id || change.docAfter?.author.id;
+		if (! authorId) { throw new Error("Failed to find authorId of change"); }
+		return authorId;
 	}
 
 }
