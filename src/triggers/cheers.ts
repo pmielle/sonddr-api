@@ -3,21 +3,23 @@ import { getDocument, patchDocument, postDocument, watchCollection } from "../da
 import { reviveUser } from "../revivers.js";
 
 
-watchCollection<Cheer>("cheers").subscribe(async change => {
-	if (change.type === "insert") {
-		// upon insert:
-		// - notify the idea author
-		// - increment the idea supports
-		const cheer = change.docAfter;
-		_notifyAuthor(cheer);
-		_incrementSupports(cheer.ideaId, 1);
-	} else if (change.type === "delete") {
-		// upon delete:
-		// - decrement the idea supports
-		const cheer = change.docBefore;
-		_incrementSupports(cheer.ideaId, -1);
-	}
-});
+export function watchCheers() {
+	watchCollection<Cheer>("cheers").subscribe(async change => {
+		if (change.type === "insert") {
+			// upon insert:
+			// - notify the idea author
+			// - increment the idea supports
+			const cheer = change.docAfter;
+			_notifyAuthor(cheer);
+			_incrementSupports(cheer.ideaId, 1);
+		} else if (change.type === "delete") {
+			// upon delete:
+			// - decrement the idea supports
+			const cheer = change.docBefore;
+			_incrementSupports(cheer.ideaId, -1);
+		}
+	});
+}
 
 
 // private

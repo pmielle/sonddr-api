@@ -19,6 +19,7 @@ import { deleteCheer, getCheer, putCheer } from "./handlers/cheers.js";
 import { deleteComment, getComment, getComments, postComment } from "./handlers/comments.js";
 import { getDiscussion, getDiscussions, patchDiscussion, postDiscussion } from "./handlers/discussions.js";
 import { getNotifications, patchNotification } from "./handlers/notifications.js";
+import { startAllTriggers } from "./triggers.js";
 
 const port = 3000;
 const app = express();
@@ -74,7 +75,7 @@ router.get('/goals/:id',
 
 router.get('/ideas',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getIdeas(req, res, next);
@@ -86,7 +87,7 @@ router.get('/ideas',
 // ideas
 router.get('/ideas/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId, async (req, res, next) => {
+	auth.fetchUserId.bind(auth), async (req, res, next) => {
 		try {
 			await getIdea(req, res, next);
 		} catch (err) {
@@ -96,7 +97,7 @@ router.get('/ideas/:id',
 
 router.delete('/ideas/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await deleteIdea(req, res, next);
@@ -107,7 +108,7 @@ router.delete('/ideas/:id',
 
 router.patch(`/ideas/:id`,
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	upload.fields([{ name: "cover", maxCount: 1 }, { name: "images" }]),
 	async (req, res, next) => {
 		try {
@@ -119,7 +120,7 @@ router.patch(`/ideas/:id`,
 
 router.post('/ideas',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	upload.fields([{ name: "cover", maxCount: 1 }, { name: "images" },]),
 	async (req, res, next) => {
 		try {
@@ -132,7 +133,7 @@ router.post('/ideas',
 // users
 router.patch(`/users/:id`,
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await patchUser(req, res, next);
@@ -143,7 +144,7 @@ router.patch(`/users/:id`,
 
 router.get('/users',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getUsers(req, res, next);
@@ -154,7 +155,7 @@ router.get('/users',
 
 router.put('/users/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await putUser(req, res, next);
@@ -165,7 +166,7 @@ router.put('/users/:id',
 
 router.get('/users/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getUser(req, res, next);
@@ -177,7 +178,7 @@ router.get('/users/:id',
 // votes
 router.delete(`/votes/:id`,
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await deleteVote(req, res, next);
@@ -188,7 +189,7 @@ router.delete(`/votes/:id`,
 
 router.put(`/votes/:id`,
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await putVote(req, res, next);
@@ -200,7 +201,7 @@ router.put(`/votes/:id`,
 // cheers
 router.delete(`/cheers/:id`,
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await deleteCheer(req, res, next);
@@ -221,7 +222,7 @@ router.get('/cheers/:id',
 
 router.put('/cheers/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await putCheer(req, res, next);
@@ -233,7 +234,7 @@ router.put('/cheers/:id',
 // comments
 router.get('/comments/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getComment(req, res, next);
@@ -244,7 +245,7 @@ router.get('/comments/:id',
 
 router.post('/comments',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await postComment(req, res, next);
@@ -255,7 +256,7 @@ router.post('/comments',
 
 router.delete('/comments/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await deleteComment(req, res, next);
@@ -266,7 +267,7 @@ router.delete('/comments/:id',
 
 router.get('/comments',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getComments(req, res, next);
@@ -278,7 +279,7 @@ router.get('/comments',
 // discussions
 router.post('/discussions',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await postDiscussion(req, res, next);
@@ -289,7 +290,7 @@ router.post('/discussions',
 
 router.patch('/discussions/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await patchDiscussion(req, res, next);
@@ -309,7 +310,7 @@ router.get('/discussions/:id',
 	});
 
 router.get('/discussions',
-	auth.authenticateRequest,
+	auth.authenticateRequest.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getDiscussions(req, res, next);
@@ -322,7 +323,7 @@ router.get('/discussions',
 // notifications
 router.patch('/notifications/:id',
 	auth.keycloak.protect(),
-	auth.fetchUserId,
+	auth.fetchUserId.bind(auth),
 	async (req, res, next) => {
 		try {
 			await patchNotification(req, res, next);
@@ -332,7 +333,7 @@ router.patch('/notifications/:id',
 	});
 
 router.get('/notifications',
-	auth.authenticateRequest,
+	auth.authenticateRequest.bind(auth),
 	async (req, res, next) => {
 		try {
 			await getNotifications(req, res, next);
@@ -426,6 +427,11 @@ messagesWss.on('connection', (ws, incomingMessage) => {
 	});
 
 });
+
+
+// triggers
+// ----------------------------------------------
+startAllTriggers();
 
 
 // error handling
