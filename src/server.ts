@@ -302,6 +302,7 @@ router.patch('/discussions/:id',
 
 router.get('/discussions/:id',
 	keycloak.protect(),
+	fetchUserId,
 	async (req, res, next) => {
 		try {
 			await getDiscussion(req, res, next);

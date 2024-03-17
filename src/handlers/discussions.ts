@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from "express";
-import { filter as rxFilter } from "rxjs";
+import { map, filter as rxFilter, switchMap } from "rxjs";
 
 import { Change, DbDiscussion, Discussion, User, ping_str } from "sonddr-shared";
 import { getDocument, getDocuments, patchDocument, postDocument } from "../database.js";
 import { _getFromReqBody, _getReqPath, _getUnique } from "../handlers.js";
-import { reviveDiscussion, reviveDiscussions } from "../revivers.js";
+import { reviveChange, reviveDiscussion, reviveDiscussions } from "../revivers.js";
 import { discussionsChanges$ } from "../triggers.js";
 import { Filter } from "../types.js";
 import { SSE } from "../sse.js";
@@ -18,9 +18,10 @@ export async function getDiscussions(req: Request, res: Response, next: NextFunc
 		_getReqPath(req),
 		{ field: "date", desc: true },
 		{ ...filter },  // otherwise can't be reused in watch()
-	).then(dbDocs => reviveDiscussions(dbDocs));
+	).then(dbDocs => reviveDiscussions(dbDocs, userId));
 	sse.send(docs);
 	const changesSub = discussionsChanges$.pipe(
+		switchMap(change => reviveChange(change, reviveDiscussion, userId)),
 		rxFilter(change => _getUsersOfDiscussionChange(change).map(u => u.id).includes(userId)),
 	).subscribe(change => sse.send(change));
 	// heartbeat to keep the connection alive
@@ -69,8 +70,9 @@ export async function patchDiscussion(req: Request, res: Response, next: NextFun
 }
 
 export async function getDiscussion(req: Request, res: Response, next: NextFunction) {
+	const userId = req["userId"];
 	const doc = await getDocument<DbDiscussion>(_getReqPath(req))
-		.then(dbDoc => reviveDiscussion(dbDoc));
+		.then(dbDoc => reviveDiscussion(dbDoc, userId));
 	res.json(doc);
 }
 

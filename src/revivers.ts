@@ -4,19 +4,16 @@ import { getDocuments } from "./database.js";
 
 // users
 // --------------------------------------------
-export function reviveUser(dbDoc: DbUser, userId?: string): User {
+export function reviveUser(dbDoc: DbUser, userId: string): User {
 	return reviveUsers([dbDoc], userId)[0];
 }
 
 // userId is the id of the logged-in user
-// FIXME: https://trello.com/c/FNO4FCva
-export function reviveUsers(dbDocs: DbUser[], userId?: string): User[] {
+export function reviveUsers(dbDocs: DbUser[], userId: string): User[] {
     if (dbDocs.length == 0) { return []; }
     // convert dbDocs into docs
     const docs: User[] = dbDocs.map((dbDoc) => {
-        dbDoc["isUser"] = userId === undefined 
-		? undefined 
-		: dbDoc.id === userId;
+        dbDoc["isUser"] = dbDoc.id === userId;
         return dbDoc as any;
     });
     // return
@@ -26,13 +23,12 @@ export function reviveUsers(dbDocs: DbUser[], userId?: string): User[] {
 
 // messages
 // --------------------------------------------
-export async function reviveMessage(dbDoc: DbMessage, userId?: string): Promise<Message> {
+export async function reviveMessage(dbDoc: DbMessage, userId: string): Promise<Message> {
     return (await reviveMessages([dbDoc], userId))[0];
 }
 
 // userId is the id of the logged-in user
-// FIXME: https://trello.com/c/FNO4FCva
-export async function reviveMessages(dbDocs: DbMessage[], userId?: string): Promise<Message[]> {
+export async function reviveMessages(dbDocs: DbMessage[], userId: string): Promise<Message[]> {
     if (dbDocs.length == 0) { return []; }
     // get users
     let usersToGet = _getUnique(dbDocs, "authorId");
@@ -54,11 +50,12 @@ export async function reviveMessages(dbDocs: DbMessage[], userId?: string): Prom
 
 // discussions
 // --------------------------------------------
-export async function reviveDiscussion(dbDoc: DbDiscussion): Promise<Discussion> {
-    return (await reviveDiscussions([dbDoc]))[0];
+export async function reviveDiscussion(dbDoc: DbDiscussion, userId: string): Promise<Discussion> {
+    return (await reviveDiscussions([dbDoc], userId))[0];
 }
 
-export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discussion[]> {
+export async function reviveDiscussions(dbDocs: DbDiscussion[], userId: string): Promise<Discussion[]> {
+
     if (dbDocs.length == 0) { return []; }
     // get lastMessages
     const messagesToGet = _getUnique(dbDocs, "lastMessageId");
@@ -77,7 +74,7 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
         "users", 
         undefined, 
         {field: "id", operator: "in", value: usersToGet}
-    ).then(dbDocs => reviveUsers(dbDocs, undefined));
+    ).then(dbDocs => reviveUsers(dbDocs, userId));
     // convert dbDocs into docs
     const messages: Message[] = messageDocs.map((dbDoc) => {
         const {authorId, ...data} = dbDoc;
@@ -94,12 +91,16 @@ export async function reviveDiscussions(dbDocs: DbDiscussion[]): Promise<Discuss
     return docs;
 }
 
-export async function reviveChange<DbT, T>(change: Change<DbT>, reviver: (x: DbT) => Promise<T>): Promise<Change<T>> {
+export async function reviveChange<DbT, T>(
+	change: Change<DbT>, 
+	reviver: (x: DbT, ...extraParams: any) => Promise<T>, 
+	...reviverExtraParams: any
+): Promise<Change<T>> {
 	const toRevive = [];
 	let beforeFlag: boolean;
 	if (change.docBefore) { toRevive.push(change.docBefore); beforeFlag = true; } else { beforeFlag = false; }
 	if (change.docAfter) { toRevive.push(change.docAfter) }
-	const revived = await Promise.all(toRevive.map(x => reviver(x)));
+	const revived = await Promise.all(toRevive.map(x => reviver(x, ...reviverExtraParams)));
 	let docBefore: T;
 	let docAfter: T;
 	if (revived.length === 1) {

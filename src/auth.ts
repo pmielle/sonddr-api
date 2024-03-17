@@ -24,8 +24,8 @@ export function init_keycloak(store: any) {
 }
 
 export async function fetchUserId(req: Request, res: Response, next: NextFunction) {
-	const token = (await this.keycloak.getGrant(req, res)).access_token;
-	const profile = await this.keycloak.grantManager.userInfo(token);
+	const token = (await keycloak.getGrant(req, res)).access_token;
+	const profile = await keycloak.grantManager.userInfo(token);
 	req["userId"] = makeMongoId(profile["sub"]).toString();
 	next();
 }
@@ -33,14 +33,14 @@ export async function fetchUserId(req: Request, res: Response, next: NextFunctio
 export async function authenticateIncomingMessage(incomingMessage: IncomingMessage): Promise<void> {
 	const url = new URL(incomingMessage.url, `http://${incomingMessage.headers.host}`);
 		const token = url.searchParams.get("token");
-	let profile = await this.keycloak.grantManager.userInfo(token);
+	let profile = await keycloak.grantManager.userInfo(token);
 	incomingMessage["userId"] = makeMongoId(profile["sub"]).toString();
 }
 
 export async function authenticateRequest(req: Request, res: Response, next: NextFunction): Promise<void> {
 	const url = new URL(req.url, `http://${req.headers.host}`);
 		const token = url.searchParams.get("token");
-	let profile = await this.keycloak.grantManager.userInfo(token);
+	let profile = await keycloak.grantManager.userInfo(token);
 	req["userId"] = makeMongoId(profile["sub"]).toString();
 	next();
 }

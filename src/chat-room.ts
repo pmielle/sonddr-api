@@ -1,9 +1,9 @@
 import { WebSocket } from "ws";
-import { Subscription, filter as rxFilter } from "rxjs";
+import { Subscription, filter as rxFilter, switchMap } from "rxjs";
 
 import { Change, DbMessage, Message, placeholder_id } from "sonddr-shared";
 import { getDocuments } from "./database.js";
-import { reviveMessages } from "./revivers.js";
+import { reviveChange, reviveMessage, reviveMessages } from "./revivers.js";
 import { messagesChanges$ } from "./triggers.js";
 
 
@@ -41,9 +41,9 @@ export class ChatRoom {
 	databaseSub?: Subscription;
 	clients = new Map<string, WebSocket>();  // keys are user IDs
 
-	constructor(discussionId: string, firstUserId: string, firstUserSocket: WebSocket) {
+	constructor(discussionId: string, userId: string, firstUserSocket: WebSocket) {
 		this.discussionId = discussionId;
-		this._init(firstUserId, firstUserSocket);
+		this._init(userId, firstUserSocket);
 	}
 
 	async join(userId: string, socket: WebSocket) {
@@ -70,9 +70,9 @@ export class ChatRoom {
 		socket.send(JSON.stringify(payload));
 	}
 
-	async _init(firstUserId: string, firstUserSocket: WebSocket) {
-		await this.join(firstUserId, firstUserSocket);
-		this._listenToDatabase();
+	async _init(userId: string, firstUserSocket: WebSocket) {
+		await this.join(userId, firstUserSocket);
+		this._listenToDatabase(userId);
 	}
 
 	async _getOldMessages(userId: string): Promise<Message[]> {
@@ -84,8 +84,9 @@ export class ChatRoom {
 		return docs;
 	}
 
-	_listenToDatabase() {
+	_listenToDatabase(userId: string) {
 		this.databaseSub = messagesChanges$.pipe(
+			switchMap(change => reviveChange(change, reviveMessage, userId)),
 			rxFilter(change => this._getDiscussionIdOfChange(change) === this.discussionId),
 		).subscribe(change => {
 			for (const [userId, ws] of this.clients) {

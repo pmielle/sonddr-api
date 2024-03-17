@@ -1,8 +1,7 @@
-import { Subject, switchMap } from "rxjs";
+import { Subject } from "rxjs";
 
-import { Change, DbDiscussion, Discussion, Notification, Message, DbMessage } from "sonddr-shared";
+import { Change, DbDiscussion, Notification, DbMessage } from "sonddr-shared";
 import { watchCollection } from "./database.js";
-import { reviveMessage, reviveDiscussion, reviveChange } from "./revivers.js";
 import { watchComments } from "./triggers/comments.js";
 import { watchIdeas } from "./triggers/ideas.js";
 import { watchVotes } from "./triggers/votes.js";
@@ -24,12 +23,8 @@ export function startAllTriggers() {
 export const notificationsChanges$: Subject<Change<Notification>> = new Subject();
 watchCollection<Notification>("notifications").subscribe(notificationsChanges$);
 
-export const discussionsChanges$: Subject<Change<Discussion>> = new Subject();
-watchCollection<DbDiscussion>("discussions").pipe(
-	switchMap(async change => await reviveChange(change, reviveDiscussion))
-).subscribe(discussionsChanges$);
+export const discussionsChanges$: Subject<Change<DbDiscussion>> = new Subject();
+watchCollection<DbDiscussion>("discussions").subscribe(discussionsChanges$);
 
-export const messagesChanges$: Subject<Change<Message>> = new Subject();
-watchCollection<DbMessage>("messages").pipe(
-	switchMap(async change => await reviveChange(change, reviveMessage))
-).subscribe(messagesChanges$);
+export const messagesChanges$: Subject<Change<DbMessage>> = new Subject();
+watchCollection<DbMessage>("messages").subscribe(messagesChanges$);
