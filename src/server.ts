@@ -135,6 +135,7 @@ router.post('/ideas',
 router.patch(`/users/:id`,
 	keycloak.protect(),
 	fetchUserId,
+	upload.single("cover"),
 	async (req, res, next) => {
 		try {
 			await patchUser(req, res, next);

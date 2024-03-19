@@ -14,6 +14,7 @@ export async function putUser(req: Request, res: Response, next: NextFunction) {
 		date: new Date(),
 		externalLinks: [],
 		bio: "",
+		cover: undefined,
 	};
 	await putDocument(_getReqPath(req), payload);
 	res.send();
@@ -51,6 +52,9 @@ export async function patchUser(req: Request, res: Response, next: NextFunction)
 	if (newName) { patches.push({ field: "name", operator: "set", value: newName }); }
 	const newBio = req.body["bio"];
 	if (newBio) { patches.push({ field: "bio", operator: "set", value: newBio }); }
+	const cover: Express.Multer.File | undefined = req.file;
+	console.log(cover);
+	if (cover !== undefined) { patches.push({ operator: "set", field: "cover", value: cover.filename }); }
 	if (patches.length > 0) { await patchDocument(path, patches); }
 	// find links to remove or to add
 	// can't be done in parallel otherwise race condition
