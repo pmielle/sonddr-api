@@ -53,7 +53,6 @@ export async function patchUser(req: Request, res: Response, next: NextFunction)
 	const newBio = req.body["bio"];
 	if (newBio) { patches.push({ field: "bio", operator: "set", value: newBio }); }
 	const cover: Express.Multer.File | undefined = req.file;
-	console.log(cover);
 	if (cover !== undefined) { patches.push({ operator: "set", field: "cover", value: cover.filename }); }
 	if (patches.length > 0) { await patchDocument(path, patches); }
 	// find links to remove or to add
