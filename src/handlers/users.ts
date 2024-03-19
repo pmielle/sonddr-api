@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from "express";
 import { DbUser } from "sonddr-shared";
 import { _getFromReqBody, _getReqPath } from "../handlers.js";
 import { getDocument, getDocuments, patchDocument, putDocument } from "../database.js";
-import { Filter } from "../types.js";
+import { Filter, Patch } from "../types.js";
 import { reviveUser, reviveUsers } from "../revivers.js";
 
 
@@ -44,25 +44,31 @@ export async function patchUser(req: Request, res: Response, next: NextFunction)
 	const path = _getReqPath(req);
 	const userId = req.params["id"];
 	if (!userId === req["userId"]) { throw new Error(`Unauthorized`); }
+	// scalar fields updates
+	// all in a single update op
+	const patches: Patch[] = [];
+	const newName = req.body["name"];
+	if (newName) { patches.push({ field: "name", operator: "set", value: newName }); }
+	const newBio = req.body["bio"];
+	if (newBio) { patches.push({ field: "bio", operator: "set", value: newBio }); }
+	if (patches.length > 0) { await patchDocument(path, patches); }
 	// find links to remove or to add
+	// can't be done in parallel otherwise race condition
 	const linkToRemove = req.body["removeExternalLink"];
 	const linkToAdd = req.body["addExternalLink"];
-	if (!linkToRemove && !linkToAdd) { throw new Error(`Both remove- and addExternalLink are missing`); }
-	const promises: Promise<void>[] = [];
 	if (linkToRemove) {
-		promises.push(patchDocument(path, {
+		await patchDocument(path, {
 			field: 'externalLinks',
 			operator: 'pull',
 			value: { type: linkToRemove.type },
-		}))
+		});
 	}
 	if (linkToAdd) {
-		promises.push(patchDocument(path, {
+		await patchDocument(path, {
 			field: 'externalLinks',
 			operator: 'addToSet',
 			value: linkToAdd,
-		}))
+		});
 	}
-	await Promise.all(promises);
 	res.send();
 }
